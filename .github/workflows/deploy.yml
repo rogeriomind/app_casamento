@@ -92,12 +92,12 @@ jobs:
             --exclude='artifacts' \
             --exclude='prisma/pgdata' \
             --exclude='*.log' \
-            -czf app_casamento_release.tar.gz .
+            -czf "$RUNNER_TEMP/app_casamento_release.tar.gz" .
 
       - name: Upload release to VPS
         run: |
           set -euo pipefail
-          scp -i ~/.ssh/vps_key -P "$VPS_PORT" app_casamento_release.tar.gz \
+          scp -i ~/.ssh/vps_key -P "$VPS_PORT" "$RUNNER_TEMP/app_casamento_release.tar.gz" \
             "$VPS_USER@$VPS_HOST:$RELEASE_TARBALL"
 
       - name: Deploy on VPS
