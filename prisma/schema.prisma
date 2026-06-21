@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Event {
+  id            String         @id @default(cuid())
+  slug          String         @unique
+  clientName    String
+  clientNumber  String         @unique
+  clientHash    String         @unique
+  storagePrefix String
+  name          String
+  coupleName    String
+  monogram      String
+  eventDate     DateTime
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  guestSessions GuestSession[]
+  photos        Photo[]
+}
+
+model GuestSession {
+  id         String      @id @default(cuid())
+  eventId    String
+  guestName  String
+  deviceId   String?
+  lastSeenAt DateTime    @default(now())
+  createdAt  DateTime    @default(now())
+  event      Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  photos     Photo[]
+  likes      PhotoLike[]
+
+  @@unique([eventId, deviceId])
+  @@index([eventId])
+  @@index([eventId, lastSeenAt])
+}
+
+model Photo {
+  id                  String       @id @default(cuid())
+  eventId             String
+  guestSessionId      String
+  guestName           String
+  imageUrl            String
+  thumbnailUrl        String?
+  imageObjectPath     String?
+  thumbnailObjectPath String?
+  status              PhotoStatus  @default(published)
+  originalFileName    String?
+  mimeType            String
+  sizeInBytes         Int
+  tags                String       @default("[]")
+  likeCount           Int          @default(0)
+  isDemo              Boolean      @default(false)
+  createdAt           DateTime     @default(now())
+  event               Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guestSession        GuestSession @relation(fields: [guestSessionId], references: [id], onDelete: Cascade)
+  likes               PhotoLike[]
+
+  @@index([eventId, status, createdAt])
+  @@index([guestSessionId])
+}
+
+model PhotoLike {
+  id             String       @id @default(cuid())
+  photoId        String
+  guestSessionId String
+  createdAt      DateTime     @default(now())
+  photo          Photo        @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  guestSession   GuestSession @relation(fields: [guestSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([photoId, guestSessionId])
+  @@index([guestSessionId])
+}
+
+enum PhotoStatus {
+  published
+  processing
+  rejected
+}
