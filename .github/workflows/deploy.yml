@@ -58,8 +58,7 @@ jobs:
       VPS_USER: ${{ secrets.VPS_USER }}
       VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
       APP_PATH: ${{ secrets.APP_PATH }}
-      REPO_URL: ${{ secrets.REPO_URL || format('https://github.com/{0}.git', github.repository) }}
-      BRANCH: main
+      RELEASE_TARBALL: /tmp/app_casamento_release.tar.gz
 
     steps:
       - name: Checkout repository
@@ -80,8 +79,29 @@ jobs:
           chmod 600 ~/.ssh/vps_key
           ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
 
+      - name: Package release
+        run: |
+          set -euo pipefail
+          tar \
+            --exclude='.git' \
+            --exclude='.env' \
+            --exclude='.env*.local' \
+            --exclude='node_modules' \
+            --exclude='.next' \
+            --exclude='coverage' \
+            --exclude='artifacts' \
+            --exclude='prisma/pgdata' \
+            --exclude='*.log' \
+            -czf app_casamento_release.tar.gz .
+
+      - name: Upload release to VPS
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/vps_key -P "$VPS_PORT" app_casamento_release.tar.gz \
+            "$VPS_USER@$VPS_HOST:$RELEASE_TARBALL"
+
       - name: Deploy on VPS
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/vps_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
-            "APP_PATH='$APP_PATH' REPO_URL='$REPO_URL' BRANCH='$BRANCH' bash -s" < deploy/deploy.sh
+            "APP_PATH='$APP_PATH' RELEASE_TARBALL='$RELEASE_TARBALL' bash -s" < deploy/deploy.sh

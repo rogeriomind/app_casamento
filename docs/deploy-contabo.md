@@ -9,7 +9,7 @@ Local -> GitHub -> GitHub Actions -> VPS Contabo -> Docker Compose.
 - `.github/workflows/deploy.yml`: roda lint, testes, build e deploy na branch `main`.
 - `Dockerfile`: build da aplicacao Next.js com Prisma.
 - `docker-compose.yml`: sobe `app` e `db` Postgres.
-- `deploy/deploy.sh`: atualiza o codigo na VPS e recria os containers.
+- `deploy/deploy.sh`: publica o pacote enviado pelo GitHub Actions e recria os containers.
 - `scripts/bootstrap-contabo.sh`: prepara Docker, usuario `deploy`, firewall e pasta da aplicacao.
 - `.env.production.example`: modelo do `.env` que deve existir somente na VPS.
 
@@ -25,13 +25,7 @@ VPS_SSH_KEY=conteudo_da_chave_privada_ssh
 APP_PATH=/opt/apps/app_casamento
 ```
 
-Opcional, se o repositorio for privado ou voce quiser usar SSH para clonar:
-
-```text
-REPO_URL=git@github.com:rogeriomind/app_casamento.git
-```
-
-Se o repositorio for privado, configure tambem uma chave SSH do usuario `deploy` da VPS como Deploy Key no GitHub.
+O workflow envia um pacote do codigo para a VPS via SSH. A VPS nao precisa clonar o repositorio no GitHub, o que funciona melhor para repositorios privados.
 
 ## Criar chave SSH para o GitHub Actions
 
@@ -124,8 +118,7 @@ Na VPS:
 
 ```bash
 cd /opt/apps/app_casamento
-git log --oneline -5
-git reset --hard COMMIT_ANTERIOR
-docker compose build
-docker compose up -d --remove-orphans
+docker compose logs -f app
 ```
+
+Para rollback por commit, rode novamente o workflow no GitHub a partir do commit desejado.
