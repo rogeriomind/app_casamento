@@ -3,12 +3,38 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteBunnyObject, uploadBunnyObject } from "@/lib/bunny-storage";
 import { processAndStorePhoto } from "@/lib/photo-storage";
 
+const heicConvertMock = vi.hoisted(() =>
+  vi.fn(async () =>
+    Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  ),
+);
+
+vi.mock("heic-convert", () => ({
+  default: heicConvertMock,
+}));
+
 vi.mock("@/lib/bunny-storage", () => ({
   deleteBunnyObject: vi.fn(async () => undefined),
   uploadBunnyObject: vi.fn(
     async (objectPath: string) => `https://cdn.example.com/${objectPath}`,
   ),
 }));
+
+function fileFromBuffer(buffer: Buffer, name: string, type: string) {
+  return {
+    name,
+    size: buffer.byteLength,
+    type,
+    arrayBuffer: async () =>
+      buffer.buffer.slice(
+        buffer.byteOffset,
+        buffer.byteOffset + buffer.byteLength,
+      ),
+  } as File;
+}
 
 async function createImageFile() {
   const buffer = await sharp({
@@ -22,16 +48,7 @@ async function createImageFile() {
     .png()
     .toBuffer();
 
-  return {
-    name: "foto.png",
-    size: buffer.byteLength,
-    type: "image/png",
-    arrayBuffer: async () =>
-      buffer.buffer.slice(
-        buffer.byteOffset,
-        buffer.byteOffset + buffer.byteLength,
-      ),
-  } as File;
+  return fileFromBuffer(buffer, "foto.png", "image/png");
 }
 
 describe("processAndStorePhoto", () => {
@@ -42,6 +59,7 @@ describe("processAndStorePhoto", () => {
       async (objectPath: string) =>
         `https://cdn.example.com/${objectPath}`,
     );
+    heicConvertMock.mockClear();
   });
 
   it("uploads the processed image and thumbnail to Bunny", async () => {
@@ -79,6 +97,44 @@ describe("processAndStorePhoto", () => {
     expect(storedPhoto.originalFileName).toBe("foto.png");
     expect(storedPhoto.sizeInBytes).toBeGreaterThan(0);
     expect(deleteBunnyObject).not.toHaveBeenCalled();
+  });
+
+  it("converts HEIC files before processing when Sharp cannot read them", async () => {
+    const heicBuffer = Buffer.from("not-a-real-heic");
+    const file = fileFromBuffer(heicBuffer, "foto.heic", "image/heic");
+
+    const storedPhoto = await processAndStorePhoto(file, "clients/hash-123");
+
+    expect(heicConvertMock).toHaveBeenCalledWith({
+      buffer: heicBuffer,
+      format: "JPEG",
+      quality: 0.9,
+    });
+    expect(storedPhoto.mimeType).toBe("image/jpeg");
+    expect(uploadBunnyObject).toHaveBeenCalledTimes(2);
+  });
+
+  it("accepts recoverable JPEGs without an end marker", async () => {
+    const buffer = await sharp({
+      create: {
+        width: 64,
+        height: 64,
+        channels: 3,
+        background: "#ffffff",
+      },
+    })
+      .jpeg()
+      .toBuffer();
+    const file = fileFromBuffer(
+      buffer.subarray(0, buffer.byteLength - 2),
+      "foto.jpg",
+      "image/jpeg",
+    );
+
+    const storedPhoto = await processAndStorePhoto(file, "clients/hash-123");
+
+    expect(storedPhoto.mimeType).toBe("image/jpeg");
+    expect(uploadBunnyObject).toHaveBeenCalledTimes(2);
   });
 
   it("cleans up the uploaded image if the thumbnail upload fails", async () => {
