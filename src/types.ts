@@ -30,6 +30,7 @@ export type PaginatedPhotos = {
   page: number;
   limit: number;
   hasNextPage: boolean;
+  nextCursor: string | null;
 };
 
 export type ApiError = {

@@ -4,6 +4,46 @@ import { deleteBunnyObject, uploadBunnyObject } from "@/lib/bunny-storage";
 import { validateImageFileInput } from "@/lib/validators";
 
 const VALID_SHARP_FORMATS = new Set(["jpeg", "jpg", "png", "webp", "heif"]);
+const DEFAULT_PHOTO_PROCESSING_CONCURRENCY = 2;
+
+let activePhotoProcessors = 0;
+const waitingPhotoProcessors: Array<() => void> = [];
+
+function getPhotoProcessingConcurrency() {
+  const value = Number(process.env.PHOTO_PROCESSING_CONCURRENCY);
+  if (!Number.isInteger(value) || value < 1 || value > 8) {
+    return DEFAULT_PHOTO_PROCESSING_CONCURRENCY;
+  }
+
+  return value;
+}
+
+async function acquirePhotoProcessingSlot() {
+  if (activePhotoProcessors < getPhotoProcessingConcurrency()) {
+    activePhotoProcessors += 1;
+    return;
+  }
+
+  await new Promise<void>((resolve) => waitingPhotoProcessors.push(resolve));
+  activePhotoProcessors += 1;
+}
+
+function releasePhotoProcessingSlot() {
+  activePhotoProcessors = Math.max(0, activePhotoProcessors - 1);
+  const next = waitingPhotoProcessors.shift();
+  if (next) {
+    next();
+  }
+}
+
+async function withPhotoProcessingSlot<T>(task: () => Promise<T>) {
+  await acquirePhotoProcessingSlot();
+  try {
+    return await task();
+  } finally {
+    releasePhotoProcessingSlot();
+  }
+}
 
 export class UploadValidationError extends Error {
   constructor(
@@ -65,23 +105,25 @@ export async function processAndStorePhoto(file: File, storagePrefix: string) {
 
   const basePipeline = sharp(buffer, { failOn: "error" }).rotate();
 
-  const [imageBuffer, thumbnailBuffer] = await Promise.all([
-    basePipeline
-      .clone()
-      .resize({
-        width: 1600,
-        height: 1600,
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .jpeg({ quality: 86, mozjpeg: true })
-      .toBuffer(),
-    basePipeline
-      .clone()
-      .resize({ width: 520, height: 680, fit: "cover" })
-      .jpeg({ quality: 78, mozjpeg: true })
-      .toBuffer(),
-  ]);
+  const [imageBuffer, thumbnailBuffer] = await withPhotoProcessingSlot(() =>
+    Promise.all([
+      basePipeline
+        .clone()
+        .resize({
+          width: 1600,
+          height: 1600,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: 86, mozjpeg: true })
+        .toBuffer(),
+      basePipeline
+        .clone()
+        .resize({ width: 520, height: 680, fit: "cover" })
+        .jpeg({ quality: 78, mozjpeg: true })
+        .toBuffer(),
+    ]),
+  );
 
   let imageUploaded = false;
 

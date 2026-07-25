@@ -5,6 +5,7 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(),
   },
   guestSession: {
+    findFirst: vi.fn(),
     updateMany: vi.fn(),
   },
 }));
@@ -33,13 +34,18 @@ const context = {
 describe("POST /api/events/[eventKey]/presence", () => {
   beforeEach(() => {
     prismaMock.event.findUnique.mockReset();
+    prismaMock.guestSession.findFirst.mockReset();
     prismaMock.guestSession.updateMany.mockReset();
   });
 
-  it("updates lastSeenAt for the guest session and device", async () => {
+  it("updates lastSeenAt when the previous heartbeat is old", async () => {
     prismaMock.event.findUnique.mockResolvedValueOnce({
       id: "event-1",
       isActive: true,
+    });
+    prismaMock.guestSession.findFirst.mockResolvedValueOnce({
+      id: "session-1",
+      lastSeenAt: new Date(Date.now() - 90_000),
     });
     prismaMock.guestSession.updateMany.mockResolvedValueOnce({ count: 1 });
 
@@ -54,10 +60,29 @@ describe("POST /api/events/[eventKey]/presence", () => {
           id: "session-1",
           eventId: "event-1",
           deviceId: "device-1",
+          lastSeenAt: { lte: expect.any(Date) },
         },
         data: { lastSeenAt: expect.any(Date) },
       }),
     );
+  });
+
+  it("skips redundant writes when the session was seen recently", async () => {
+    prismaMock.event.findUnique.mockResolvedValueOnce({
+      id: "event-1",
+      isActive: true,
+    });
+    prismaMock.guestSession.findFirst.mockResolvedValueOnce({
+      id: "session-1",
+      lastSeenAt: new Date(),
+    });
+
+    const response = await POST(createRequest(), context);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toMatchObject({ ok: true, updated: false });
+    expect(prismaMock.guestSession.updateMany).not.toHaveBeenCalled();
   });
 
   it("rejects a session that does not match the device", async () => {
@@ -65,7 +90,7 @@ describe("POST /api/events/[eventKey]/presence", () => {
       id: "event-1",
       isActive: true,
     });
-    prismaMock.guestSession.updateMany.mockResolvedValueOnce({ count: 0 });
+    prismaMock.guestSession.findFirst.mockResolvedValueOnce(null);
 
     const response = await POST(createRequest(), context);
     const data = await response.json();

@@ -13,10 +13,13 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "bunny:check": "node scripts/check-bunny-storage.mjs",
+    "bunny:migrate": "tsx scripts/migrate-bunny-storage.ts"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
@@ -45,7 +48,7 @@
     "prisma": "6.19.3",
     "tailwindcss": "^4.1.18",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "vitest": "^4.0.16"
   },
   "prisma": {

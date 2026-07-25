@@ -920,6 +920,18 @@ img {
   animation: shimmer 1.2s ease-in-out infinite;
 }
 
+.gallery-sentinel {
+  width: 100%;
+  height: 1px;
+}
+
+.gallery-end-message {
+  margin: 10px 0 96px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.86rem;
+}
+
 @keyframes shimmer {
   to {
     background-position: -220% 0;
@@ -1185,6 +1197,13 @@ img {
   display: grid;
 }
 
+.tag-preview-item {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .tag-preview-card.multiple .tag-preview-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-auto-rows: minmax(72px, 1fr);
@@ -1200,8 +1219,45 @@ img {
   min-height: 0;
 }
 
+.tag-preview-card.multiple .tag-preview-item,
 .tag-preview-card.multiple .tag-preview-grid img {
   border-radius: 8px;
+}
+
+.upload-preview-status {
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: 7px;
+  z-index: 2;
+  display: grid;
+  gap: 5px;
+  padding: 7px;
+  border-radius: 8px;
+  background: rgba(36, 23, 15, 0.72);
+  color: #fff;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.upload-preview-status progress {
+  width: 100%;
+  height: 6px;
+  accent-color: #f5cbbf;
+}
+
+.upload-preview-status small {
+  color: #ffe9e2;
+}
+
+.upload-preview-status button {
+  min-height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .tag-photo-count {

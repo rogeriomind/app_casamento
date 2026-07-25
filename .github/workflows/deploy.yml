@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: "postgresql://ci:ci@localhost:5432/album_casamento?schema=public"
-      APP_BASE_URL: "http://localhost:3000"
+      APP_BASE_URL: "https://casamento.example.com"
       ADMIN_API_KEY: "ci-admin-key"
       CLIENT_HASH_SECRET: "ci-client-hash-secret"
       BUNNY_STORAGE_ENDPOINT: "https://storage.example.com/app-casamento"
@@ -39,11 +39,17 @@ jobs:
       - name: Generate Prisma client
         run: npm run prisma:generate
 
+      - name: Validate shell scripts
+        run: bash -n deploy/deploy.sh scripts/bootstrap-contabo.sh scripts/check-vps-port.sh
+
       - name: Lint
         run: npm run lint
 
       - name: Test
         run: npm run test
+
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: Build
         run: npm run build
@@ -59,6 +65,7 @@ jobs:
       VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
       APP_PATH: ${{ secrets.APP_PATH }}
       RELEASE_TARBALL: /tmp/app_casamento_release.tar.gz
+      COMMIT_SHA: ${{ github.sha }}
 
     steps:
       - name: Checkout repository
@@ -104,4 +111,21 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/vps_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
-            "APP_PATH='$APP_PATH' RELEASE_TARBALL='$RELEASE_TARBALL' bash -s" < deploy/deploy.sh
+            "APP_PATH='$APP_PATH' RELEASE_TARBALL='$RELEASE_TARBALL' COMMIT_SHA='$COMMIT_SHA' bash -s" < deploy/deploy.sh
+
+      - name: Remote healthcheck
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/vps_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "APP_PATH='$APP_PATH' bash -lc 'cd \"\$APP_PATH\" && APP_PORT=\$(grep -E \"^APP_PORT=\" .env | tail -n 1 | cut -d= -f2-) && curl -fsS \"http://127.0.0.1:\$APP_PORT/api/health\"'"
+
+      - name: Deploy report
+        if: always()
+        run: |
+          {
+            echo "## Deploy app_casamento"
+            echo ""
+            echo "- Commit: \`${COMMIT_SHA}\`"
+            echo "- App path: \`${APP_PATH}\`"
+            echo "- Environment: production"
+          } >> "$GITHUB_STEP_SUMMARY"

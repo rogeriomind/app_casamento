@@ -1,4 +1,5 @@
 import type { Event, Photo } from "@prisma/client";
+import { getBunnyPublicUrl } from "@/lib/bunny-storage";
 import type { PublicEvent, PublicPhoto } from "@/types";
 
 export function serializeEvent(event: Event): PublicEvent {
@@ -37,14 +38,25 @@ export function serializePhoto(
     | "tags"
     | "likeCount"
     | "createdAt"
-  >,
+  > &
+    Partial<Pick<Photo, "imageObjectPath" | "thumbnailObjectPath">>,
   isLiked = false,
   canDelete = false,
+  options: { preferObjectPathUrls?: boolean } = {},
 ): PublicPhoto {
+  const imageUrl =
+    options.preferObjectPathUrls && photo.imageObjectPath
+      ? getBunnyPublicUrl(photo.imageObjectPath)
+      : photo.imageUrl;
+  const thumbnailUrl =
+    options.preferObjectPathUrls && photo.thumbnailObjectPath
+      ? getBunnyPublicUrl(photo.thumbnailObjectPath)
+      : photo.thumbnailUrl;
+
   return {
     id: photo.id,
-    imageUrl: photo.imageUrl,
-    thumbnailUrl: photo.thumbnailUrl,
+    imageUrl,
+    thumbnailUrl,
     guestName: photo.guestName,
     tags: parsePhotoTags(photo.tags),
     likeCount: photo.likeCount,

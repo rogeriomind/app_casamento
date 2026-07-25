@@ -6,7 +6,7 @@ import { processAndStorePhoto } from "@/lib/photo-storage";
 vi.mock("@/lib/bunny-storage", () => ({
   deleteBunnyObject: vi.fn(async () => undefined),
   uploadBunnyObject: vi.fn(
-    async (objectPath: string) => `https://productpulse.b-cdn.net/${objectPath}`,
+    async (objectPath: string) => `https://cdn.example.com/${objectPath}`,
   ),
 }));
 
@@ -40,7 +40,7 @@ describe("processAndStorePhoto", () => {
     vi.mocked(uploadBunnyObject).mockReset();
     vi.mocked(uploadBunnyObject).mockImplementation(
       async (objectPath: string) =>
-        `https://productpulse.b-cdn.net/${objectPath}`,
+        `https://cdn.example.com/${objectPath}`,
     );
   });
 
@@ -64,10 +64,10 @@ describe("processAndStorePhoto", () => {
       expect.any(Buffer),
     );
     expect(storedPhoto.imageUrl).toMatch(
-      /^https:\/\/productpulse\.b-cdn\.net\/clients\/hash-123\/photos\/[0-9a-f-]+\.jpg$/,
+      /^https:\/\/cdn\.example\.com\/clients\/hash-123\/photos\/[0-9a-f-]+\.jpg$/,
     );
     expect(storedPhoto.thumbnailUrl).toMatch(
-      /^https:\/\/productpulse\.b-cdn\.net\/clients\/hash-123\/thumbnails\/[0-9a-f-]+-thumb\.jpg$/,
+      /^https:\/\/cdn\.example\.com\/clients\/hash-123\/thumbnails\/[0-9a-f-]+-thumb\.jpg$/,
     );
     expect(storedPhoto.imageObjectPath).toMatch(
       /^clients\/hash-123\/photos\/[0-9a-f-]+\.jpg$/,
@@ -84,7 +84,7 @@ describe("processAndStorePhoto", () => {
   it("cleans up the uploaded image if the thumbnail upload fails", async () => {
     const file = await createImageFile();
     vi.mocked(uploadBunnyObject)
-      .mockResolvedValueOnce("https://productpulse.b-cdn.net/photo.jpg")
+      .mockResolvedValueOnce("https://cdn.example.com/photo.jpg")
       .mockRejectedValueOnce(new Error("Bunny failed"));
 
     await expect(processAndStorePhoto(file, "clients/hash-123")).rejects.toThrow(

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { validateBunnyStorageEnv } from "@/lib/env";
 
 export type BunnyStorageConfig = {
   storageEndpoint: string;
@@ -17,11 +18,11 @@ export class BunnyStorageError extends Error {
   }
 }
 
-function trimTrailingSlashes(value: string) {
+export function trimTrailingSlashes(value: string) {
   return value.trim().replace(/\/+$/, "");
 }
 
-function normalizeObjectPath(objectPath: string) {
+export function normalizeBunnyObjectPath(objectPath: string) {
   const segments = objectPath
     .split("/")
     .map((segment) => segment.trim())
@@ -38,39 +39,29 @@ function normalizeObjectPath(objectPath: string) {
 }
 
 function buildUrl(baseUrl: string, objectPath: string) {
-  return `${trimTrailingSlashes(baseUrl)}/${normalizeObjectPath(objectPath)}`;
+  return `${trimTrailingSlashes(baseUrl)}/${normalizeBunnyObjectPath(objectPath)}`;
 }
 
 export function getBunnyStorageConfig(): BunnyStorageConfig {
-  const storageEndpoint = process.env.BUNNY_STORAGE_ENDPOINT?.trim();
-  const storagePassword = process.env.BUNNY_STORAGE_PASSWORD?.trim();
-  const publicBaseUrl = getBunnyPublicBaseUrl();
-
-  if (!storageEndpoint || !storagePassword) {
+  try {
+    return validateBunnyStorageEnv();
+  } catch {
     throw new BunnyStorageError(
       "Bunny Storage nao esta configurado.",
       "BUNNY_STORAGE_NOT_CONFIGURED",
     );
   }
-
-  return {
-    storageEndpoint: trimTrailingSlashes(storageEndpoint),
-    storagePassword,
-    publicBaseUrl,
-  };
 }
 
 export function getBunnyPublicBaseUrl() {
-  const publicBaseUrl = process.env.BUNNY_PUBLIC_BASE_URL?.trim();
-
-  if (!publicBaseUrl) {
+  try {
+    return validateBunnyStorageEnv().publicBaseUrl;
+  } catch {
     throw new BunnyStorageError(
       "URL publica do Bunny nao esta configurada.",
       "BUNNY_PUBLIC_BASE_URL_NOT_CONFIGURED",
     );
   }
-
-  return trimTrailingSlashes(publicBaseUrl);
 }
 
 export function getBunnyPublicUrl(
@@ -138,6 +129,52 @@ export async function uploadBunnyObject(
   }
 
   return getBunnyPublicUrl(objectPath, config);
+}
+
+export async function headBunnyObject(
+  objectPath: string,
+  config = getBunnyStorageConfig(),
+  fetchFn: typeof fetch = fetch,
+) {
+  const response = await fetchFn(buildUrl(config.storageEndpoint, objectPath), {
+    method: "HEAD",
+    headers: {
+      AccessKey: config.storagePassword,
+    },
+  });
+
+  if (!response.ok) {
+    throw new BunnyStorageError(
+      `Bunny Storage rejeitou a consulta com status ${response.status}.`,
+      "BUNNY_HEAD_FAILED",
+      response.status,
+    );
+  }
+
+  return response;
+}
+
+export async function downloadBunnyObject(
+  objectPath: string,
+  config = getBunnyStorageConfig(),
+  fetchFn: typeof fetch = fetch,
+) {
+  const response = await fetchFn(buildUrl(config.storageEndpoint, objectPath), {
+    method: "GET",
+    headers: {
+      AccessKey: config.storagePassword,
+    },
+  });
+
+  if (!response.ok) {
+    throw new BunnyStorageError(
+      `Bunny Storage rejeitou a leitura com status ${response.status}.`,
+      "BUNNY_DOWNLOAD_FAILED",
+      response.status,
+    );
+  }
+
+  return Buffer.from(await response.arrayBuffer());
 }
 
 export async function deleteBunnyObject(

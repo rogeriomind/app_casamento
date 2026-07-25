@@ -5,7 +5,7 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
 ARG BUILD_DATABASE_URL="postgresql://build:build@db:5432/album_casamento?schema=public"
-ARG BUILD_APP_BASE_URL="http://localhost:3000"
+ARG BUILD_APP_BASE_URL="https://casamento.example.com"
 ARG BUILD_ADMIN_API_KEY="build-admin-key"
 ARG BUILD_CLIENT_HASH_SECRET="build-client-hash-secret"
 ARG BUILD_BUNNY_STORAGE_ENDPOINT="https://storage.example.com/app-casamento"
