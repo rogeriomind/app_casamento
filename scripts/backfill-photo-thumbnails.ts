@@ -2,6 +2,7 @@ import "dotenv/config";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  deleteBunnyObject,
   downloadBunnyObject,
   getBunnyObjectPathFromPublicUrl,
 } from "../src/lib/bunny-storage";
@@ -10,6 +11,7 @@ import { createAndUploadPhotoThumbnail } from "../src/lib/photo-storage";
 
 type CliOptions = {
   dryRun: boolean;
+  regenerateNonWebp: boolean;
   limit?: number;
   batchSize: number;
   eventId?: string;
@@ -42,13 +44,19 @@ function log(event: string, payload: Record<string, unknown> = {}) {
 }
 
 export function parseBackfillArgs(argv: string[]): CliOptions {
-  const options: CliOptions = { dryRun: false, batchSize: 20 };
+  const options: CliOptions = {
+    dryRun: false,
+    regenerateNonWebp: false,
+    batchSize: 20,
+  };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
 
     if (arg === "--dry-run") {
       options.dryRun = true;
+    } else if (arg === "--regenerate-non-webp") {
+      options.regenerateNonWebp = true;
     } else if (arg === "--limit") {
       const value = Number(argv[index + 1]);
       if (!Number.isInteger(value) || value <= 0) {
@@ -78,8 +86,37 @@ export function parseBackfillArgs(argv: string[]): CliOptions {
   return options;
 }
 
-function hasExistingThumbnail(photo: BackfillPhoto) {
-  return Boolean(photo.thumbnailUrl && photo.thumbnailObjectPath);
+function isWebpThumbnailPath(value: string | null) {
+  return Boolean(value?.toLowerCase().includes(".webp"));
+}
+
+function hasExistingThumbnail(photo: BackfillPhoto, regenerateNonWebp: boolean) {
+  if (!photo.thumbnailUrl || !photo.thumbnailObjectPath) {
+    return false;
+  }
+
+  if (
+    regenerateNonWebp &&
+    (!isWebpThumbnailPath(photo.thumbnailUrl) ||
+      !isWebpThumbnailPath(photo.thumbnailObjectPath))
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function getPreviousThumbnailObjectPaths(photo: BackfillPhoto) {
+  return Array.from(
+    new Set(
+      [
+        photo.thumbnailObjectPath,
+        photo.thumbnailUrl
+          ? getBunnyObjectPathFromPublicUrl(photo.thumbnailUrl)
+          : null,
+      ].filter((path): path is string => Boolean(path)),
+    ),
+  );
 }
 
 async function downloadOriginalPhotoBuffer(photo: BackfillPhoto) {
@@ -100,8 +137,39 @@ async function downloadOriginalPhotoBuffer(photo: BackfillPhoto) {
   return Buffer.from(await response.arrayBuffer());
 }
 
-async function backfillPhoto(photo: BackfillPhoto, dryRun: boolean) {
-  if (hasExistingThumbnail(photo)) {
+async function cleanupPreviousThumbnailObjects(
+  photo: BackfillPhoto,
+  nextThumbnailObjectPath: string,
+) {
+  const previousPaths = getPreviousThumbnailObjectPaths(photo).filter(
+    (objectPath) => objectPath !== nextThumbnailObjectPath,
+  );
+
+  if (previousPaths.length === 0) {
+    return;
+  }
+
+  const cleanupResults = await Promise.allSettled(
+    previousPaths.map((objectPath) => deleteBunnyObject(objectPath)),
+  );
+  const failedCleanupCount = cleanupResults.filter(
+    (result) => result.status === "rejected",
+  ).length;
+
+  if (failedCleanupCount > 0) {
+    log("photo_thumbnail_backfill_cleanup_failed", {
+      photoId: photo.id,
+      failedCleanupCount,
+    });
+  }
+}
+
+async function backfillPhoto(
+  photo: BackfillPhoto,
+  dryRun: boolean,
+  regenerateNonWebp: boolean,
+) {
+  if (hasExistingThumbnail(photo, regenerateNonWebp)) {
     log("photo_thumbnail_backfill_skip_existing", { photoId: photo.id });
     return "skipped" as const;
   }
@@ -110,6 +178,7 @@ async function backfillPhoto(photo: BackfillPhoto, dryRun: boolean) {
     photoId: photo.id,
     eventId: photo.eventId,
     dryRun,
+    regenerateNonWebp,
   });
 
   if (dryRun) {
@@ -138,6 +207,10 @@ async function backfillPhoto(photo: BackfillPhoto, dryRun: boolean) {
       thumbnailObjectPath: uploadedThumbnail.thumbnailObjectPath,
     },
   });
+  await cleanupPreviousThumbnailObjects(
+    photo,
+    uploadedThumbnail.thumbnailObjectPath,
+  );
 
   log("photo_thumbnail_backfill_ok", {
     photoId: photo.id,
@@ -162,6 +235,7 @@ export async function runBackfill(options: CliOptions) {
 
   log("photo_thumbnail_backfill_start", {
     dryRun: options.dryRun,
+    regenerateNonWebp: options.regenerateNonWebp,
     limit: options.limit ?? null,
     batchSize: options.batchSize,
     eventId: options.eventId ?? null,
@@ -186,6 +260,24 @@ export async function runBackfill(options: CliOptions) {
           { thumbnailUrl: "" },
           { thumbnailObjectPath: null },
           { thumbnailObjectPath: "" },
+          ...(options.regenerateNonWebp
+            ? [
+                {
+                  thumbnailUrl: {
+                    not: {
+                      contains: ".webp",
+                    },
+                  },
+                },
+                {
+                  thumbnailObjectPath: {
+                    not: {
+                      contains: ".webp",
+                    },
+                  },
+                },
+              ]
+            : []),
         ],
       },
       include: {
@@ -210,7 +302,11 @@ export async function runBackfill(options: CliOptions) {
       stats.candidates += 1;
 
       try {
-        const result = await backfillPhoto(photo, options.dryRun);
+        const result = await backfillPhoto(
+          photo,
+          options.dryRun,
+          options.regenerateNonWebp,
+        );
         if (result === "backfilled") {
           stats.backfilled += 1;
         } else {

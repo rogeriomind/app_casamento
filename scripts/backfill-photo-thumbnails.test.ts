@@ -13,6 +13,7 @@ vi.mock("../src/lib/prisma", () => ({
 }));
 
 vi.mock("../src/lib/bunny-storage", () => ({
+  deleteBunnyObject: vi.fn(async () => undefined),
   downloadBunnyObject: vi.fn(async () => Buffer.from("original")),
   getBunnyObjectPathFromPublicUrl: vi.fn(
     () => "clients/hash/photos/from-url.jpg",
@@ -29,7 +30,7 @@ vi.mock("../src/lib/photo-storage", () => ({
   })),
 }));
 
-import { downloadBunnyObject } from "../src/lib/bunny-storage";
+import { deleteBunnyObject, downloadBunnyObject } from "../src/lib/bunny-storage";
 import { createAndUploadPhotoThumbnail } from "../src/lib/photo-storage";
 import { parseBackfillArgs, runBackfill } from "./backfill-photo-thumbnails";
 
@@ -54,6 +55,7 @@ describe("photo thumbnail backfill script", () => {
   beforeEach(() => {
     prismaMock.photo.findMany.mockReset();
     prismaMock.photo.update.mockReset();
+    vi.mocked(deleteBunnyObject).mockClear();
     vi.mocked(downloadBunnyObject).mockClear();
     vi.mocked(createAndUploadPhotoThumbnail).mockClear();
     vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -76,6 +78,7 @@ describe("photo thumbnail backfill script", () => {
       ]),
     ).toEqual({
       dryRun: true,
+      regenerateNonWebp: false,
       limit: 10,
       batchSize: 5,
       eventId: "event-1",
@@ -87,7 +90,11 @@ describe("photo thumbnail backfill script", () => {
       .mockResolvedValueOnce([photo()])
       .mockResolvedValueOnce([]);
 
-    const stats = await runBackfill({ dryRun: true, batchSize: 20 });
+    const stats = await runBackfill({
+      dryRun: true,
+      regenerateNonWebp: false,
+      batchSize: 20,
+    });
 
     expect(stats).toMatchObject({
       scanned: 1,
@@ -106,7 +113,11 @@ describe("photo thumbnail backfill script", () => {
       .mockResolvedValueOnce([photo()])
       .mockResolvedValueOnce([]);
 
-    const stats = await runBackfill({ dryRun: false, batchSize: 20 });
+    const stats = await runBackfill({
+      dryRun: false,
+      regenerateNonWebp: false,
+      batchSize: 20,
+    });
 
     expect(stats.backfilled).toBe(1);
     expect(downloadBunnyObject).toHaveBeenCalledWith(
@@ -141,11 +152,46 @@ describe("photo thumbnail backfill script", () => {
       ])
       .mockResolvedValueOnce([]);
 
-    const stats = await runBackfill({ dryRun: false, batchSize: 20 });
+    const stats = await runBackfill({
+      dryRun: false,
+      regenerateNonWebp: false,
+      batchSize: 20,
+    });
 
     expect(stats.skipped).toBe(1);
     expect(downloadBunnyObject).not.toHaveBeenCalled();
     expect(createAndUploadPhotoThumbnail).not.toHaveBeenCalled();
     expect(prismaMock.photo.update).not.toHaveBeenCalled();
+  });
+
+  it("regenerates non-WebP thumbnails when requested and cleans up the old object", async () => {
+    prismaMock.photo.findMany
+      .mockResolvedValueOnce([
+        photo({
+          thumbnailUrl: "https://cdn.example.com/clients/hash/thumbnails/old.jpg",
+          thumbnailObjectPath: "clients/hash/thumbnails/old.jpg",
+        }),
+      ])
+      .mockResolvedValueOnce([]);
+
+    const stats = await runBackfill({
+      dryRun: false,
+      regenerateNonWebp: true,
+      batchSize: 20,
+    });
+
+    expect(stats.backfilled).toBe(1);
+    expect(createAndUploadPhotoThumbnail).toHaveBeenCalledTimes(1);
+    expect(prismaMock.photo.update).toHaveBeenCalledWith({
+      where: { id: "photo-1" },
+      data: {
+        thumbnailUrl:
+          "https://cdn.example.com/clients/hash/thumbnails/photo-thumb.webp",
+        thumbnailObjectPath: "clients/hash/thumbnails/photo-thumb.webp",
+      },
+    });
+    expect(deleteBunnyObject).toHaveBeenCalledWith(
+      "clients/hash/thumbnails/old.jpg",
+    );
   });
 });
