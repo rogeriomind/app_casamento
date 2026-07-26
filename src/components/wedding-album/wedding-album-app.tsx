@@ -528,6 +528,7 @@ export function WelcomeScreen({
         aria-hidden="true"
         sizes="150px"
         loading="eager"
+        unoptimized
       />
       <Image
         className="flower-corner right"
@@ -538,6 +539,7 @@ export function WelcomeScreen({
         aria-hidden="true"
         sizes="150px"
         loading="eager"
+        unoptimized
       />
 
       <div className="welcome-copy">
@@ -555,9 +557,11 @@ export function WelcomeScreen({
           width={820}
           height={547}
           sizes="(max-width: 430px) 84vw, 361px"
+          loading="eager"
           fetchPriority="high"
           placeholder="blur"
           blurDataURL={COUPLE_ILLUSTRATION_BLUR_DATA_URL}
+          unoptimized
         />
         <Image
           className="flower-base"
@@ -568,6 +572,8 @@ export function WelcomeScreen({
           aria-hidden="true"
           sizes="(max-width: 430px) 135vw, 580px"
           loading="eager"
+          fetchPriority="high"
+          unoptimized
         />
       </div>
 
