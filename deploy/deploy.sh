@@ -175,7 +175,8 @@ chmod 600 "$backup_dir/env.backup"
 
 if [ -n "${POSTGRES_DB:-}" ] && [ -n "${POSTGRES_USER:-}" ] && [ -n "$(compose_cmd ps -q db 2>/dev/null || true)" ]; then
   echo "Criando backup do PostgreSQL..."
-  compose_cmd exec -T db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > "$backup_dir/postgres.sql"
+  compose_cmd exec -T db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" \
+    < /dev/null > "$backup_dir/postgres.sql"
   chmod 600 "$backup_dir/postgres.sql"
 else
   echo "Banco ainda nao esta ativo; pg_dump ignorado neste deploy inicial."
