@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-export const DEFAULT_GALLERY_PAGE_SIZE = 16;
+export const DEFAULT_GALLERY_PAGE_SIZE = 12;
 export const MAX_GALLERY_PAGE_SIZE = 60;
 
 export type GalleryCursor = {

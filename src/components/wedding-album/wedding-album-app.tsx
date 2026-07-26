@@ -1239,6 +1239,7 @@ export function PhotoGridButton({
   }
 
   const canDelete = galleryScope === "mine" && photo.canDelete;
+  const gridImageUrl = photo.thumbnailUrl ?? photo.imageUrl;
 
   return (
     <div
@@ -1271,10 +1272,13 @@ export function PhotoGridButton({
         }
       >
         <img
-          src={photo.thumbnailUrl ?? photo.imageUrl}
+          src={gridImageUrl}
           alt={`Foto enviada por ${photo.guestName}`}
+          width={720}
+          height={720}
           loading={isPriority ? "eager" : "lazy"}
           decoding="async"
+          fetchPriority={isPriority ? "high" : "auto"}
         />
         {galleryScope === "all" && (
           <span className="photo-like-badge">

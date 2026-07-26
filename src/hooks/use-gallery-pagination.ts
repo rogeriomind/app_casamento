@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PaginatedPhotos, PublicPhoto } from "@/types";
 
-const GALLERY_PAGE_SIZE = 16;
+const GALLERY_PAGE_SIZE = 12;
 
 function readApiErrorFallback(response: Response) {
   return response
@@ -18,7 +18,10 @@ function encodeClientCursor(photo: PublicPhoto) {
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function mergePhotos(current: PublicPhoto[], incoming: PublicPhoto[]) {
+export function mergeGalleryPhotos(
+  current: PublicPhoto[],
+  incoming: PublicPhoto[],
+) {
   const seen = new Set<string>();
   return [...incoming, ...current]
     .filter((photo) => {
@@ -109,7 +112,7 @@ export function useGalleryPagination({
 
         const data = (await response.json()) as PaginatedPhotos;
         setPhotos((current) =>
-          reset ? data.items : mergePhotos(current, data.items),
+          reset ? data.items : mergeGalleryPhotos(current, data.items),
         );
         setNextCursor(data.nextCursor);
         setHasNextPage(data.hasNextPage);

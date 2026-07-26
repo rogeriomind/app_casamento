@@ -7,8 +7,8 @@ import {
 } from "@/lib/gallery-pagination";
 
 describe("gallery cursor pagination", () => {
-  it("uses 16 photos as the default initial page size", () => {
-    expect(normalizeGalleryLimit(null)).toBe(16);
+  it("uses 12 photos as the default initial page size", () => {
+    expect(normalizeGalleryLimit(null)).toBe(12);
   });
 
   it("caps overly large page sizes", () => {

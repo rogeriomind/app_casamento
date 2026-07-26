@@ -54,8 +54,7 @@ describe("bunny storage helper", () => {
     const publicUrl = await uploadBunnyObject(
       "/clients/hash-123/photos/photo.jpg",
       buffer,
-      config,
-      fetchMock as unknown as typeof fetch,
+      { config, fetchFn: fetchMock as unknown as typeof fetch },
     );
 
     expect(publicUrl).toBe(
@@ -90,8 +89,7 @@ describe("bunny storage helper", () => {
       await uploadBunnyObject(
         "clients/hash-123/photos/photo.jpg",
         Buffer.from("hello"),
-        config,
-        fetchMock as unknown as typeof fetch,
+        { config, fetchFn: fetchMock as unknown as typeof fetch },
       );
     } catch (caughtError) {
       error = caughtError;
@@ -103,6 +101,27 @@ describe("bunny storage helper", () => {
       status: 401,
     });
     expect((error as Error).message).not.toContain("super-secret");
+  });
+
+  it("uploads files with explicit content type and immutable cache headers", async () => {
+    const buffer = Buffer.from("webp");
+    const fetchMock = vi.fn(async () => new Response(null, { status: 201 }));
+
+    await uploadBunnyObject("clients/hash-123/thumbnails/photo.webp", buffer, {
+      config,
+      fetchFn: fetchMock as unknown as typeof fetch,
+      contentType: "image/webp",
+      cacheControl: "public, max-age=31536000, immutable",
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(init.headers).toMatchObject({
+      "Content-Type": "image/webp",
+      "Cache-Control": "public, max-age=31536000, immutable",
+    });
   });
 
   it("normalizes paths and blocks traversal", () => {

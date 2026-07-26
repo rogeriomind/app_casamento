@@ -98,7 +98,7 @@ async function copyAndVerifyObject(
 ) {
   const buffer = await downloadBunnyObject(objectPath, oldConfig);
   const sourceHash = createHash("sha256").update(buffer).digest("hex");
-  await uploadBunnyObject(objectPath, buffer, newConfig);
+  await uploadBunnyObject(objectPath, buffer, { config: newConfig });
   const copied = await downloadBunnyObject(objectPath, newConfig);
   const copiedHash = createHash("sha256").update(copied).digest("hex");
 

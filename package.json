@@ -19,7 +19,8 @@
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "bunny:check": "node scripts/check-bunny-storage.mjs",
-    "bunny:migrate": "tsx scripts/migrate-bunny-storage.ts"
+    "bunny:migrate": "tsx scripts/migrate-bunny-storage.ts",
+    "photos:backfill-thumbnails": "tsx scripts/backfill-photo-thumbnails.ts"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",

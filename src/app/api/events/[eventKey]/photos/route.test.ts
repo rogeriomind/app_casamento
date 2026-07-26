@@ -25,7 +25,8 @@ vi.mock("@/lib/photo-storage", () => ({
   UploadValidationError: class UploadValidationError extends Error {},
 }));
 
-import { GET } from "./route";
+import { processAndStorePhoto } from "@/lib/photo-storage";
+import { GET, POST } from "./route";
 
 const context = {
   params: Promise.resolve({ eventKey: "event-1" }),
@@ -61,8 +62,10 @@ describe("GET /api/events/[eventKey]/photos", () => {
     process.env.BUNNY_PUBLIC_BASE_URL = "https://new-cdn.example.com";
     prismaMock.event.findUnique.mockReset();
     prismaMock.photo.findMany.mockReset();
+    prismaMock.photo.create.mockReset();
     prismaMock.guestSession.findFirst.mockReset();
     prismaMock.photoLike.findMany.mockReset();
+    vi.mocked(processAndStorePhoto).mockReset();
   });
 
   it("does not hide legacy public URLs when the Bunny Pull Zone changes", async () => {
@@ -99,5 +102,73 @@ describe("GET /api/events/[eventKey]/photos", () => {
           "https://new-cdn.example.com/clients/hash/thumbnails/photo-2-thumb.jpg",
       }),
     ]);
+  });
+
+  it("persists and serializes the original and thumbnail URLs on upload", async () => {
+    prismaMock.event.findUnique.mockResolvedValueOnce({
+      id: "event-1",
+      isActive: true,
+      storagePrefix: "clients/hash",
+    });
+    prismaMock.guestSession.findFirst.mockResolvedValueOnce({
+      id: "session-1",
+      eventId: "event-1",
+      guestName: "Maria",
+    });
+    vi.mocked(processAndStorePhoto).mockResolvedValueOnce({
+      imageUrl: "https://new-cdn.example.com/clients/hash/photos/photo.png",
+      thumbnailUrl:
+        "https://new-cdn.example.com/clients/hash/thumbnails/photo-thumb.webp",
+      imageObjectPath: "clients/hash/photos/photo.png",
+      thumbnailObjectPath: "clients/hash/thumbnails/photo-thumb.webp",
+      mimeType: "image/png",
+      sizeInBytes: 1234,
+      originalFileName: "foto.png",
+    });
+    prismaMock.photo.create.mockImplementationOnce(async ({ data }) =>
+      photo({
+        id: "photo-new",
+        ...data,
+        tags: data.tags,
+        createdAt: new Date("2026-07-25T12:00:00.000Z"),
+      }),
+    );
+
+    const formData = new FormData();
+    formData.set("guestSessionId", "session-1");
+    formData.set("tags", JSON.stringify(["noivos"]));
+    formData.set(
+      "file",
+      new File([Buffer.from("fake")], "foto.png", { type: "image/png" }),
+    );
+
+    const response = await POST(
+      { formData: async () => formData } as Request,
+      context,
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(processAndStorePhoto).toHaveBeenCalledWith(
+      expect.any(File),
+      "clients/hash",
+    );
+    expect(prismaMock.photo.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        imageUrl: "https://new-cdn.example.com/clients/hash/photos/photo.png",
+        thumbnailUrl:
+          "https://new-cdn.example.com/clients/hash/thumbnails/photo-thumb.webp",
+        imageObjectPath: "clients/hash/photos/photo.png",
+        thumbnailObjectPath: "clients/hash/thumbnails/photo-thumb.webp",
+        mimeType: "image/png",
+        sizeInBytes: 1234,
+      }),
+    });
+    expect(data).toMatchObject({
+      id: "photo-new",
+      imageUrl: "https://new-cdn.example.com/clients/hash/photos/photo.png",
+      thumbnailUrl:
+        "https://new-cdn.example.com/clients/hash/thumbnails/photo-thumb.webp",
+    });
   });
 });

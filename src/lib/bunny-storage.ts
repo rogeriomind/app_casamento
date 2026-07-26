@@ -7,6 +7,13 @@ export type BunnyStorageConfig = {
   publicBaseUrl: string;
 };
 
+export type BunnyUploadOptions = {
+  contentType?: string;
+  cacheControl?: string;
+  config?: BunnyStorageConfig;
+  fetchFn?: typeof fetch;
+};
+
 export class BunnyStorageError extends Error {
   constructor(
     message: string,
@@ -107,15 +114,17 @@ export function isBunnyPublicUrl(urlString: string) {
 export async function uploadBunnyObject(
   objectPath: string,
   buffer: Buffer,
-  config = getBunnyStorageConfig(),
-  fetchFn: typeof fetch = fetch,
+  options: BunnyUploadOptions = {},
 ) {
+  const config = options.config ?? getBunnyStorageConfig();
+  const fetchFn = options.fetchFn ?? fetch;
   const response = await fetchFn(buildUrl(config.storageEndpoint, objectPath), {
     method: "PUT",
     headers: {
       AccessKey: config.storagePassword,
-      "Content-Type": "application/octet-stream",
+      "Content-Type": options.contentType ?? "application/octet-stream",
       Checksum: createHash("sha256").update(buffer).digest("hex").toUpperCase(),
+      ...(options.cacheControl ? { "Cache-Control": options.cacheControl } : {}),
     },
     body: new Uint8Array(buffer),
   });
