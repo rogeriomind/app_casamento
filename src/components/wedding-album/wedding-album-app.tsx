@@ -19,6 +19,7 @@ import {
   User,
   X,
 } from "lucide-react";
+import Image from "next/image";
 import {
   type ChangeEvent,
   type FormEvent,
@@ -54,6 +55,9 @@ import type {
   PublicEvent,
   PublicPhoto,
 } from "@/types";
+import flowerBase from "../../../public/assets/welcome-flor.webp";
+import flowerDecoration from "../../../public/assets/welcome-flor2.webp";
+import coupleIllustration from "../../../public/assets/welcome-nos.webp";
 
 type Step = "welcome" | "name" | "gallery" | "tagging" | "success" | "account";
 type NameBackTarget = "welcome" | "account";
@@ -62,6 +66,8 @@ type GalleryScope = "all" | "mine";
 type PendingUpload = UploadItem;
 
 const MAX_GALLERY_UPLOADS = 10;
+const COUPLE_ILLUSTRATION_BLUR_DATA_URL =
+  "data:image/webp;base64,UklGRg4BAABXRUJQVlA4WAoAAAAQAAAADwAACgAAQUxQSHkAAAABcFtt23O8///LVFmZU5d7xwJWMEHO7MAKJtAZIHUG0KlUOWce+Z0hIiaAvi2tbk1G3DaAvMzP6AAIlzFO/mkCcI+AS5SIhFhjBaxKAFAn0g3AnQlUBPsg0pD3UOsn0+VqfwFwv98BhyTJdHK1qRh3W422VCJAfFEgAFZQOCBuAAAAMAIAnQEqEAALAAPAYCWUAuwGLkcFYr/edEAA/uc5sInHaSTS5YiByKd500Bf+95mNJefBPxx9zSuFjQhUvh78qPU0ceSdX0hhE7Yyj32yvk9rvqsL5gxLb6qcO9+oYI0oVf4/j2T0McPL8wAAAA=";
 
 function getPhotoSearchTags(photo: PublicPhoto) {
   return photo.tags.map(normalizeTag);
@@ -381,17 +387,6 @@ export function WeddingAlbumApp({ event, initialPhotos }: WeddingAlbumAppProps) 
     setStep("welcome");
   }
 
-  if (!isHydrated) {
-    return (
-      <AppShell>
-        <div className="center-state">
-          <Loader2 aria-hidden="true" className="spin-icon" />
-          <p>Carregando album...</p>
-        </div>
-      </AppShell>
-    );
-  }
-
   return (
     <AppShell>
       <input
@@ -416,7 +411,11 @@ export function WeddingAlbumApp({ event, initialPhotos }: WeddingAlbumAppProps) 
       />
 
       {step === "welcome" && (
-        <WelcomeScreen event={event} onStart={handleStartName} />
+        <WelcomeScreen
+          event={event}
+          isReady={isHydrated}
+          onStart={handleStartName}
+        />
       )}
 
       {step === "name" && (
@@ -511,15 +510,35 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
 export function WelcomeScreen({
   event,
+  isReady,
   onStart,
 }: {
   event: PublicEvent;
+  isReady: boolean;
   onStart: () => void;
 }) {
   return (
     <div className="screen welcome-screen">
-      <img className="flower-corner left" src="/assets/flor2.png" alt="" />
-      <img className="flower-corner right" src="/assets/flor2.png" alt="" />
+      <Image
+        className="flower-corner left"
+        src={flowerDecoration}
+        alt=""
+        width={300}
+        height={315}
+        aria-hidden="true"
+        sizes="150px"
+        loading="eager"
+      />
+      <Image
+        className="flower-corner right"
+        src={flowerDecoration}
+        alt=""
+        width={300}
+        height={315}
+        aria-hidden="true"
+        sizes="150px"
+        loading="eager"
+      />
 
       <div className="welcome-copy">
         <p className="couple-name">{event.coupleName}</p>
@@ -529,15 +548,35 @@ export function WelcomeScreen({
       </div>
 
       <div className="couple-illustration-wrap">
-        <img
+        <Image
           className="couple-illustration"
-          src="/assets/nos.png"
+          src={coupleIllustration}
           alt="Ilustracao dos noivos"
+          width={820}
+          height={547}
+          sizes="(max-width: 430px) 84vw, 361px"
+          fetchPriority="high"
+          placeholder="blur"
+          blurDataURL={COUPLE_ILLUSTRATION_BLUR_DATA_URL}
         />
-        <img className="flower-base" src="/assets/flor.png" alt="" />
+        <Image
+          className="flower-base"
+          src={flowerBase}
+          alt=""
+          width={1160}
+          height={773}
+          aria-hidden="true"
+          sizes="(max-width: 430px) 135vw, 580px"
+          loading="eager"
+        />
       </div>
 
-      <button className="primary-button" type="button" onClick={onStart}>
+      <button
+        className="primary-button"
+        type="button"
+        disabled={!isReady}
+        onClick={onStart}
+      >
         Comecar
       </button>
     </div>

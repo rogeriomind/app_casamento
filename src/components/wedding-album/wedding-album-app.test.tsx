@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PhotoGridButton,
   PhotoPreviewModal,
+  WelcomeScreen,
 } from "@/components/wedding-album/wedding-album-app";
-import type { PublicPhoto } from "@/types";
+import type { PublicEvent, PublicPhoto } from "@/types";
 
 function photo(overrides: Partial<PublicPhoto> = {}): PublicPhoto {
   return {
@@ -21,7 +22,31 @@ function photo(overrides: Partial<PublicPhoto> = {}): PublicPhoto {
   };
 }
 
+const event: PublicEvent = {
+  id: "event-1",
+  slug: "leticia-rogerio",
+  name: "Casamento",
+  coupleName: "Leticia & Rogerio",
+  monogram: "L&R",
+  eventDate: "2026-07-25T12:00:00.000Z",
+  isActive: true,
+};
+
 describe("wedding album image rendering", () => {
+  it("renders the welcome screen while keeping the start button gated by hydration", () => {
+    const { rerender } = render(
+      <WelcomeScreen event={event} isReady={false} onStart={vi.fn()} />,
+    );
+
+    expect(screen.getByText("Bem-vindo ao album do casamento")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Comecar" })).toBeDisabled();
+    expect(screen.queryByText("Carregando album...")).not.toBeInTheDocument();
+
+    rerender(<WelcomeScreen event={event} isReady onStart={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "Comecar" })).toBeEnabled();
+  });
+
   it("renders the gallery card with the thumbnail URL", () => {
     render(
       <PhotoGridButton

@@ -154,6 +154,7 @@ img {
 .flower-corner {
   position: absolute;
   width: 150px;
+  height: auto;
   opacity: 0.72;
   top: 28px;
   pointer-events: none;
@@ -219,12 +220,14 @@ img {
   min-height: 350px;
   display: grid;
   align-items: end;
+  background: var(--paper);
 }
 
 .couple-illustration {
   position: relative;
   z-index: 2;
   width: min(84%, 410px);
+  height: auto;
   margin: 0 auto 155px;
   transform: translateX(-2%);
 }
@@ -235,6 +238,7 @@ img {
   left: calc(50% + 36px);
   bottom: -76px;
   width: 135%;
+  height: auto;
   max-width: none;
   transform: translateX(-50%);
   mix-blend-mode: multiply;
