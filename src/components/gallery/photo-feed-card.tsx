@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Heart, Image as ImageIcon } from "lucide-react";
 import type { PublicPhoto } from "@/types";
 import { normalizeGuestName } from "@/lib/validators";
@@ -60,10 +60,30 @@ export function PhotoFeedCard({
 }) {
   const lastTapAtRef = useRef(0);
   const ignoreNextClickRef = useRef(false);
+  const fallbackImageUrl =
+    photo.thumbnailUrl && photo.thumbnailUrl !== photo.imageUrl
+      ? photo.thumbnailUrl
+      : null;
+  const [displayImageUrl, setDisplayImageUrl] = useState(photo.imageUrl);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const normalizedGuestName = normalizeGuestName(photo.guestName);
   const guestInitial =
     normalizedGuestName.charAt(0).toLocaleUpperCase("pt-BR") || "?";
   const relativeTime = formatPhotoRelativeTime(photo.createdAt);
+
+  useEffect(() => {
+    setDisplayImageUrl(photo.imageUrl);
+    setImageLoadFailed(false);
+  }, [photo.id, photo.imageUrl, photo.thumbnailUrl]);
+
+  function handleImageError() {
+    if (fallbackImageUrl && displayImageUrl !== fallbackImageUrl) {
+      setDisplayImageUrl(fallbackImageUrl);
+      return;
+    }
+
+    setImageLoadFailed(true);
+  }
 
   function handleImagePointerUp() {
     const now = Date.now();
@@ -103,14 +123,22 @@ export function PhotoFeedCard({
         onPointerUp={handleImagePointerUp}
         aria-label={`Abrir foto enviada por ${photo.guestName}`}
       >
-        <img
-          className="photo-feed-image"
-          src={photo.imageUrl}
-          alt={`Foto enviada por ${photo.guestName}`}
-          loading={isPriority ? "eager" : "lazy"}
-          decoding="async"
-          fetchPriority={isPriority ? "high" : "auto"}
-        />
+        {imageLoadFailed ? (
+          <span className="photo-feed-image-placeholder">
+            <ImageIcon aria-hidden="true" />
+            <span>Foto indisponivel</span>
+          </span>
+        ) : (
+          <img
+            className="photo-feed-image"
+            src={displayImageUrl}
+            alt={`Foto enviada por ${photo.guestName}`}
+            loading={isPriority ? "eager" : "lazy"}
+            decoding="async"
+            fetchPriority={isPriority ? "high" : "auto"}
+            onError={handleImageError}
+          />
+        )}
       </button>
 
       <footer className="photo-feed-footer">

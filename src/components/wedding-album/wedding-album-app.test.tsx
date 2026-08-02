@@ -250,6 +250,40 @@ describe("gallery view modes", () => {
     );
   });
 
+  it("falls back to the thumbnail when a feed original image fails", () => {
+    render(
+      <PhotoFeedCard
+        photo={photo()}
+        isPriority
+        onSelectPhoto={vi.fn()}
+        onToggleLike={vi.fn()}
+      />,
+    );
+
+    fireEvent.error(screen.getByAltText("Foto enviada por Maria"));
+
+    expect(screen.getByAltText("Foto enviada por Maria")).toHaveAttribute(
+      "src",
+      "https://cdn.example.com/thumbnails/thumb.webp",
+    );
+  });
+
+  it("shows a controlled placeholder when a feed image has no fallback", () => {
+    render(
+      <PhotoFeedCard
+        photo={photo({ thumbnailUrl: null })}
+        isPriority
+        onSelectPhoto={vi.fn()}
+        onToggleLike={vi.fn()}
+      />,
+    );
+
+    fireEvent.error(screen.getByAltText("Foto enviada por Maria"));
+
+    expect(screen.queryByAltText("Foto enviada por Maria")).not.toBeInTheDocument();
+    expect(screen.getByText("Foto indisponivel")).toBeVisible();
+  });
+
   it("calls the feed like callback once from the explicit like button", () => {
     const onToggleLike = vi.fn();
     render(
