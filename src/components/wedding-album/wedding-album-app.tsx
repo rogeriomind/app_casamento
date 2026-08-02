@@ -140,7 +140,6 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
     hasNextPage,
     initialError: galleryError,
     loadMoreError,
-    isAutoLoadSupported,
     sentinelRef,
     loadMore: loadMorePhotos,
     retry: retryGallery,
@@ -463,7 +462,6 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
           deletingPhotoIds={deletingPhotoIds}
           error={galleryError ?? uploadError}
           loadMoreError={loadMoreError}
-          isAutoLoadSupported={isAutoLoadSupported}
           sentinelRef={sentinelRef}
           onAddPhoto={handleAddPhoto}
           onDeletePhoto={handleDeletePhoto}
@@ -943,7 +941,6 @@ export function GalleryScreen({
   deletingPhotoIds,
   error,
   loadMoreError,
-  isAutoLoadSupported,
   sentinelRef,
   onAddPhoto,
   onDeletePhoto,
@@ -964,8 +961,7 @@ export function GalleryScreen({
   deletingPhotoIds: Set<string>;
   error: string | null;
   loadMoreError: string | null;
-  isAutoLoadSupported: boolean;
-  sentinelRef: React.RefObject<HTMLDivElement | null>;
+  sentinelRef: React.RefCallback<HTMLDivElement>;
   onAddPhoto: () => void;
   onDeletePhoto: (photo: PublicPhoto) => void;
   onLoadMore: () => void;
@@ -1003,8 +999,7 @@ export function GalleryScreen({
     galleryScope === "mine" ? myPhotos : filteredAllPhotos;
   const effectiveViewMode: GalleryViewMode =
     galleryScope === "all" ? viewMode : "grid";
-  const showLoadMoreButton =
-    hasNextPage && (!isAutoLoadSupported || Boolean(loadMoreError));
+  const showLoadMoreButton = hasNextPage;
   const galleryTitle = galleryScope === "mine" ? "Minhas fotos" : "Galeria";
   const emptyTitle =
     galleryScope === "mine"

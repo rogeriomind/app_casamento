@@ -39,7 +39,6 @@ function renderGalleryScreen({
   eventOverride = event,
   photos = [photo()],
   hasNextPage = false,
-  isAutoLoadSupported = true,
   loadMoreError = null,
   onToggleLike = vi.fn(),
   onLoadMore = vi.fn(),
@@ -47,7 +46,6 @@ function renderGalleryScreen({
   eventOverride?: PublicEvent;
   photos?: PublicPhoto[];
   hasNextPage?: boolean;
-  isAutoLoadSupported?: boolean;
   loadMoreError?: string | null;
   onToggleLike?: (photo: PublicPhoto) => void;
   onLoadMore?: () => void;
@@ -65,8 +63,7 @@ function renderGalleryScreen({
       deletingPhotoIds={new Set()}
       error={null}
       loadMoreError={loadMoreError}
-      isAutoLoadSupported={isAutoLoadSupported}
-      sentinelRef={{ current: null }}
+      sentinelRef={vi.fn()}
       onAddPhoto={vi.fn()}
       onDeletePhoto={vi.fn()}
       onLoadMore={onLoadMore}
@@ -302,7 +299,7 @@ describe("gallery view modes", () => {
   });
 
   it("shows the load more fallback when more pages exist", () => {
-    renderGalleryScreen({ hasNextPage: true, isAutoLoadSupported: false });
+    renderGalleryScreen({ hasNextPage: true });
 
     fireEvent.click(screen.getByRole("button", { name: "Todas as fotos" }));
 

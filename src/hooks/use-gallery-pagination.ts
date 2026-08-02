@@ -66,11 +66,11 @@ export function useGalleryPagination({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [initialError, setInitialError] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
-  const [isAutoLoadSupported, setIsAutoLoadSupported] = useState(true);
   const [likedStateSessionId, setLikedStateSessionId] = useState<string | null>(
     null,
   );
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [sentinelElement, setSentinelElement] =
+    useState<HTMLDivElement | null>(null);
   const inFlightRef = useRef(false);
   const isMountedRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -83,7 +83,7 @@ export function useGalleryPagination({
         return;
       }
 
-      if (!reset && (!hasNextPage || !nextCursor)) {
+      if (!reset && !hasNextPage) {
         return;
       }
 
@@ -186,6 +186,10 @@ export function useGalleryPagination({
     void fetchPhotos({ reset: false });
   }, [fetchPhotos]);
 
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    setSentinelElement(node);
+  }, []);
+
   const retry = useCallback(() => {
     void fetchPhotos({ reset: photos.length === 0 });
   }, [fetchPhotos, photos.length]);
@@ -215,10 +219,6 @@ export function useGalleryPagination({
   }, [eventId, initialGallery]);
 
   useEffect(() => {
-    setIsAutoLoadSupported("IntersectionObserver" in window);
-  }, []);
-
-  useEffect(() => {
     if (!guestSessionId || likedStateSessionId === guestSessionId) {
       return;
     }
@@ -227,12 +227,11 @@ export function useGalleryPagination({
   }, [fetchPhotos, guestSessionId, likedStateSessionId]);
 
   useEffect(() => {
-    if (!isAutoLoadSupported) {
+    if (typeof IntersectionObserver === "undefined") {
       return;
     }
 
-    const sentinel = sentinelRef.current;
-    if (!sentinel || !hasNextPage) {
+    if (!sentinelElement || !hasNextPage) {
       return;
     }
 
@@ -241,11 +240,15 @@ export function useGalleryPagination({
       if (entry?.isIntersecting && document.visibilityState === "visible") {
         void fetchPhotos({ reset: false });
       }
+    }, {
+      root: null,
+      rootMargin: "900px 0px 900px",
+      threshold: 0,
     });
 
-    observer.observe(sentinel);
+    observer.observe(sentinelElement);
     return () => observer.disconnect();
-  }, [fetchPhotos, hasNextPage, isAutoLoadSupported]);
+  }, [fetchPhotos, hasNextPage, sentinelElement]);
 
   return useMemo(
     () => ({
@@ -258,7 +261,6 @@ export function useGalleryPagination({
       hasNextPage,
       initialError,
       loadMoreError,
-      isAutoLoadSupported,
       sentinelRef,
       loadMore,
       retry,
@@ -270,13 +272,13 @@ export function useGalleryPagination({
       hasLoadedPhotos,
       hasNextPage,
       initialError,
-      isAutoLoadSupported,
       isLoading,
       isLoadingMore,
       loadMore,
       loadMoreError,
       photos,
       retry,
+      sentinelRef,
     ],
   );
 }

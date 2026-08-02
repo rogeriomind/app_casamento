@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import type { RefObject } from "react";
+import type { RefCallback } from "react";
 
 export function GalleryLoadMoreSentinel({
   sentinelRef,
@@ -11,7 +11,7 @@ export function GalleryLoadMoreSentinel({
   showLoadMoreButton,
   onLoadMore,
 }: {
-  sentinelRef: RefObject<HTMLDivElement | null>;
+  sentinelRef: RefCallback<HTMLDivElement>;
   hasNextPage: boolean;
   isLoadingMore: boolean;
   loadMoreError: string | null;
