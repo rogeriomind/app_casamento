@@ -15,7 +15,6 @@ import {
   Search,
   ShieldCheck,
   Tag,
-  Trash2,
   User,
   X,
 } from "lucide-react";
@@ -23,16 +22,26 @@ import Image from "next/image";
 import {
   type ChangeEvent,
   type FormEvent,
-  memo,
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useReducer,
-  useRef,
   useState,
 } from "react";
+import { GalleryLoadMoreSentinel } from "@/components/gallery/gallery-load-more-sentinel";
+import { GalleryViewToggle } from "@/components/gallery/gallery-view-toggle";
+import { PhotoFeed } from "@/components/gallery/photo-feed";
+import { PhotoGrid } from "@/components/gallery/photo-grid";
+import { PhotoGridCard } from "@/components/gallery/photo-grid-card";
 import { useEventPresence } from "@/hooks/use-event-presence";
-import { useGalleryPagination } from "@/hooks/use-gallery-pagination";
+import {
+  prependGalleryPhoto,
+  removeGalleryPhoto,
+  replaceGalleryPhoto,
+  useGalleryPagination,
+} from "@/hooks/use-gallery-pagination";
+import { useGalleryViewMode } from "@/hooks/use-gallery-view-mode";
 import { useGuestSession } from "@/hooks/use-guest-session";
 import { usePhotoLikes } from "@/hooks/use-photo-likes";
 import {
@@ -52,6 +61,8 @@ import {
 } from "@/lib/validators";
 import type {
   ApiError,
+  GalleryViewMode,
+  PaginatedPhotos,
   PublicEvent,
   PublicPhoto,
 } from "@/types";
@@ -69,8 +80,8 @@ const MAX_GALLERY_UPLOADS = 10;
 const COUPLE_ILLUSTRATION_BLUR_DATA_URL =
   "data:image/webp;base64,UklGRg4BAABXRUJQVlA4WAoAAAAQAAAADwAACgAAQUxQSHkAAAABcFtt23O8///LVFmZU5d7xwJWMEHO7MAKJtAZIHUG0KlUOWce+Z0hIiaAvi2tbk1G3DaAvMzP6AAIlzFO/mkCcI+AS5SIhFhjBaxKAFAn0g3AnQlUBPsg0pD3UOsn0+VqfwFwv98BhyTJdHK1qRh3W422VCJAfFEgAFZQOCBuAAAAMAIAnQEqEAALAAPAYCWUAuwGLkcFYr/edEAA/uc5sInHaSTS5YiByKd500Bf+95mNJefBPxx9zSuFjQhUvh78qPU0ceSdX0hhE7Yyj32yvk9rvqsL5gxLb6qcO9+oYI0oVf4/j2T0McPL8wAAAA=";
 
-function getPhotoSearchTags(photo: PublicPhoto) {
-  return photo.tags.map(normalizeTag);
+function photoMatchesTag(photo: PublicPhoto, normalizedTagSearch: string) {
+  return photo.tags.some((tag) => normalizeTag(tag).includes(normalizedTagSearch));
 }
 
 function formatUploadStatus(status: PendingUpload["status"]) {
@@ -94,14 +105,14 @@ function formatUploadStatus(status: PendingUpload["status"]) {
 
 type WeddingAlbumAppProps = {
   event: PublicEvent;
-  initialPhotos: PublicPhoto[];
+  initialGallery: PaginatedPhotos;
 };
 
 function stepReducer(_current: Step, next: Step) {
   return next;
 }
 
-export function WeddingAlbumApp({ event, initialPhotos }: WeddingAlbumAppProps) {
+export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps) {
   const [step, dispatchStep] = useReducer(stepReducer, "welcome");
   const setStep = useCallback((next: Step) => dispatchStep(next), []);
   const [nameBackTarget, setNameBackTarget] =
@@ -127,13 +138,16 @@ export function WeddingAlbumApp({ event, initialPhotos }: WeddingAlbumAppProps) 
     isLoading: isGalleryLoading,
     isLoadingMore,
     hasNextPage,
-    error: galleryError,
+    initialError: galleryError,
+    loadMoreError,
+    isAutoLoadSupported,
     sentinelRef,
+    loadMore: loadMorePhotos,
     retry: retryGallery,
   } = useGalleryPagination({
     eventId: event.id,
     guestSessionId,
-    initialPhotos,
+    initialGallery,
   });
 
   useEffect(() => {
@@ -151,10 +165,7 @@ export function WeddingAlbumApp({ event, initialPhotos }: WeddingAlbumAppProps) 
 
   const handlePublishedPhoto = useCallback(
     (photo: PublicPhoto) => {
-      setPhotos((current) => [
-        photo,
-        ...current.filter((item) => item.id !== photo.id),
-      ]);
+      setPhotos((current) => prependGalleryPhoto(current, photo));
       setSuccessPhoto((current) => current ?? photo);
       setHighlightedPhotoId(photo.id);
     },
@@ -181,9 +192,7 @@ export function WeddingAlbumApp({ event, initialPhotos }: WeddingAlbumAppProps) 
 
   const applyPhotoUpdate = useCallback(
     (nextPhoto: PublicPhoto) => {
-      setPhotos((current) =>
-        current.map((photo) => (photo.id === nextPhoto.id ? nextPhoto : photo)),
-      );
+      setPhotos((current) => replaceGalleryPhoto(current, nextPhoto));
       setSelectedPhoto((current) =>
         current?.id === nextPhoto.id ? nextPhoto : current,
       );
@@ -201,7 +210,7 @@ export function WeddingAlbumApp({ event, initialPhotos }: WeddingAlbumAppProps) 
     requireSession: () => setStep("name"),
   });
 
-  async function deletePhoto(photo: PublicPhoto) {
+  const deletePhoto = useCallback(async (photo: PublicPhoto) => {
     if (!session) {
       setNameBackTarget("welcome");
       setStep("name");
@@ -232,7 +241,7 @@ export function WeddingAlbumApp({ event, initialPhotos }: WeddingAlbumAppProps) 
         throw new Error(await readApiError(response));
       }
 
-      setPhotos((current) => current.filter((item) => item.id !== photo.id));
+      setPhotos((current) => removeGalleryPhoto(current, photo.id));
       setSelectedPhoto((current) => (current?.id === photo.id ? null : current));
       setSuccessPhoto((current) => (current?.id === photo.id ? null : current));
     } catch (error) {
@@ -248,7 +257,21 @@ export function WeddingAlbumApp({ event, initialPhotos }: WeddingAlbumAppProps) 
         return next;
       });
     }
-  }
+  }, [event.id, session, setPhotos, setStep]);
+
+  const handleAddPhoto = useCallback(() => setIsSheetOpen(true), []);
+  const handleDeletePhoto = useCallback(
+    (photo: PublicPhoto) => void deletePhoto(photo),
+    [deletePhoto],
+  );
+  const handleOpenAccount = useCallback(() => setStep("account"), [setStep]);
+  const handleSelectPhoto = useCallback((photo: PublicPhoto) => {
+    setSelectedPhoto(photo);
+  }, []);
+  const handleTogglePhotoLike = useCallback(
+    (photo: PublicPhoto) => void togglePhotoLike(photo),
+    [togglePhotoLike],
+  );
 
   async function uploadPendingPhotos(tags: string[]) {
     if (uploadQueue.items.length === 0) {
@@ -439,12 +462,15 @@ export function WeddingAlbumApp({ event, initialPhotos }: WeddingAlbumAppProps) 
           isUploading={uploadQueue.isUploading}
           deletingPhotoIds={deletingPhotoIds}
           error={galleryError ?? uploadError}
+          loadMoreError={loadMoreError}
+          isAutoLoadSupported={isAutoLoadSupported}
           sentinelRef={sentinelRef}
-          onAddPhoto={() => setIsSheetOpen(true)}
-          onDeletePhoto={(photo) => void deletePhoto(photo)}
-          onOpenAccount={() => setStep("account")}
-          onSelectPhoto={setSelectedPhoto}
-          onToggleLike={(photo) => void togglePhotoLike(photo)}
+          onAddPhoto={handleAddPhoto}
+          onDeletePhoto={handleDeletePhoto}
+          onLoadMore={loadMorePhotos}
+          onOpenAccount={handleOpenAccount}
+          onSelectPhoto={handleSelectPhoto}
+          onToggleLike={handleTogglePhotoLike}
           onRetry={retryGallery}
         />
       )}
@@ -916,9 +942,12 @@ export function GalleryScreen({
   isUploading,
   deletingPhotoIds,
   error,
+  loadMoreError,
+  isAutoLoadSupported,
   sentinelRef,
   onAddPhoto,
   onDeletePhoto,
+  onLoadMore,
   onOpenAccount,
   onSelectPhoto,
   onToggleLike,
@@ -934,9 +963,12 @@ export function GalleryScreen({
   isUploading: boolean;
   deletingPhotoIds: Set<string>;
   error: string | null;
+  loadMoreError: string | null;
+  isAutoLoadSupported: boolean;
   sentinelRef: React.RefObject<HTMLDivElement | null>;
   onAddPhoto: () => void;
   onDeletePhoto: (photo: PublicPhoto) => void;
+  onLoadMore: () => void;
   onOpenAccount: () => void;
   onSelectPhoto: (photo: PublicPhoto) => void;
   onToggleLike: (photo: PublicPhoto) => void;
@@ -944,6 +976,8 @@ export function GalleryScreen({
 }) {
   const [galleryScope, setGalleryScope] = useState<GalleryScope>("mine");
   const [tagSearch, setTagSearch] = useState("");
+  const deferredTagSearch = useDeferredValue(tagSearch);
+  const { viewMode, setViewMode } = useGalleryViewMode(event.id);
   const normalizedGuestName = guestName
     ? normalizeGuestName(guestName).toLocaleLowerCase("pt-BR")
     : "";
@@ -953,21 +987,24 @@ export function GalleryScreen({
         (photo) =>
           normalizeGuestName(photo.guestName).toLocaleLowerCase("pt-BR") ===
           normalizedGuestName,
-      ),
+    ),
     [normalizedGuestName, photos],
   );
-  const normalizedTagSearch = normalizeTag(tagSearch);
+  const normalizedTagSearch = normalizeTag(deferredTagSearch);
+  const normalizedCurrentTagSearch = normalizeTag(tagSearch);
   const filteredAllPhotos = useMemo(() => {
     if (!normalizedTagSearch) {
       return photos;
     }
 
-    return photos.filter((photo) =>
-      getPhotoSearchTags(photo).some((tag) => tag.includes(normalizedTagSearch)),
-    );
+    return photos.filter((photo) => photoMatchesTag(photo, normalizedTagSearch));
   }, [normalizedTagSearch, photos]);
   const visiblePhotos =
     galleryScope === "mine" ? myPhotos : filteredAllPhotos;
+  const effectiveViewMode: GalleryViewMode =
+    galleryScope === "all" ? viewMode : "grid";
+  const showLoadMoreButton =
+    hasNextPage && (!isAutoLoadSupported || Boolean(loadMoreError));
   const galleryTitle = galleryScope === "mine" ? "Minhas fotos" : "Galeria";
   const emptyTitle =
     galleryScope === "mine"
@@ -989,6 +1026,9 @@ export function GalleryScreen({
           <p className="gallery-title">{galleryTitle}</p>
           <p className="gallery-monogram">{event.monogram}</p>
         </div>
+        {galleryScope === "all" && (
+          <GalleryViewToggle value={viewMode} onChange={setViewMode} />
+        )}
       </header>
 
       {galleryScope === "all" && (
@@ -1006,14 +1046,14 @@ export function GalleryScreen({
 
           <div className="tag-chip-row" aria-label="Tags populares">
             <button
-              className={!normalizedTagSearch ? "active" : ""}
+              className={!normalizedCurrentTagSearch ? "active" : ""}
               type="button"
               onClick={() => setTagSearch("")}
             >
               Todas
             </button>
             {POPULAR_TAGS.map((tag) => {
-              const isActive = normalizedTagSearch === tag;
+              const isActive = normalizedCurrentTagSearch === tag;
 
               return (
                 <button
@@ -1071,23 +1111,40 @@ export function GalleryScreen({
         <GallerySkeleton />
       ) : visiblePhotos.length > 0 ? (
         <>
-          <div className="photo-grid" aria-label="Fotos do casamento">
-            {visiblePhotos.map((photo, index) => (
-              <MemoizedPhotoGridButton
-                key={photo.id}
-                photo={photo}
-                galleryScope={galleryScope}
-                isHighlighted={highlightedPhotoId === photo.id}
-                isDeleting={deletingPhotoIds.has(photo.id)}
-                isPriority={index < 6}
-                onDeletePhoto={onDeletePhoto}
-                onSelectPhoto={onSelectPhoto}
-                onToggleLike={onToggleLike}
-              />
-            ))}
-          </div>
-          <div ref={sentinelRef} className="gallery-sentinel" aria-hidden="true" />
-          {isLoadingMore && <GallerySkeleton count={6} />}
+          {effectiveViewMode === "feed" ? (
+            <PhotoFeed
+              photos={visiblePhotos}
+              onSelectPhoto={onSelectPhoto}
+              onToggleLike={onToggleLike}
+            />
+          ) : (
+            <PhotoGrid
+              photos={visiblePhotos}
+              galleryScope={galleryScope}
+              highlightedPhotoId={highlightedPhotoId}
+              deletingPhotoIds={deletingPhotoIds}
+              onDeletePhoto={onDeletePhoto}
+              onSelectPhoto={onSelectPhoto}
+              onToggleLike={onToggleLike}
+            />
+          )}
+          <GalleryLoadMoreSentinel
+            sentinelRef={sentinelRef}
+            hasNextPage={hasNextPage}
+            isLoadingMore={isLoadingMore}
+            loadMoreError={loadMoreError}
+            showLoadMoreButton={showLoadMoreButton}
+            onLoadMore={onLoadMore}
+          />
+          {isLoadingMore && effectiveViewMode === "grid" && (
+            <GallerySkeleton count={6} />
+          )}
+          {isLoadingMore && effectiveViewMode === "feed" && (
+            <p className="photo-feed-loading" role="status">
+              <Loader2 aria-hidden="true" className="spin-icon small" />
+              Carregando fotos
+            </p>
+          )}
           {!hasNextPage && galleryScope === "all" && (
             <p className="gallery-end-message">Todas as fotos foram carregadas.</p>
           )}
@@ -1219,141 +1276,7 @@ export function AccountScreen({
   );
 }
 
-export function PhotoGridButton({
-  photo,
-  galleryScope,
-  isHighlighted,
-  isDeleting,
-  isPriority,
-  onDeletePhoto,
-  onSelectPhoto,
-  onToggleLike,
-}: {
-  photo: PublicPhoto;
-  galleryScope: GalleryScope;
-  isHighlighted: boolean;
-  isDeleting: boolean;
-  isPriority: boolean;
-  onDeletePhoto: (photo: PublicPhoto) => void;
-  onSelectPhoto: (photo: PublicPhoto) => void;
-  onToggleLike: (photo: PublicPhoto) => void;
-}) {
-  const longPressTimeoutRef = useRef<number | null>(null);
-  const longPressTriggeredRef = useRef(false);
-  const lastTapAtRef = useRef(0);
-
-  function clearLongPress() {
-    if (longPressTimeoutRef.current) {
-      window.clearTimeout(longPressTimeoutRef.current);
-      longPressTimeoutRef.current = null;
-    }
-  }
-
-  function handlePointerDown() {
-    if (galleryScope !== "all") {
-      return;
-    }
-
-    longPressTriggeredRef.current = false;
-    clearLongPress();
-    longPressTimeoutRef.current = window.setTimeout(() => {
-      longPressTriggeredRef.current = true;
-      onSelectPhoto(photo);
-    }, 2000);
-  }
-
-  function handlePointerUp() {
-    if (galleryScope !== "all") {
-      return;
-    }
-
-    clearLongPress();
-    if (longPressTriggeredRef.current) {
-      longPressTriggeredRef.current = false;
-      return;
-    }
-
-    const now = Date.now();
-    if (now - lastTapAtRef.current < 360) {
-      lastTapAtRef.current = 0;
-      onToggleLike(photo);
-      return;
-    }
-
-    lastTapAtRef.current = now;
-  }
-
-  const canDelete = galleryScope === "mine" && photo.canDelete;
-  const gridImageUrl = photo.thumbnailUrl ?? photo.imageUrl;
-
-  return (
-    <div
-      className={`photo-card ${isHighlighted ? "highlighted" : ""} ${
-        photo.isLiked ? "liked" : ""
-      } ${isDeleting ? "deleting" : ""}`}
-    >
-      <button
-        className="photo-card-main"
-        type="button"
-        disabled={isDeleting}
-        onClick={() => {
-          if (galleryScope !== "all") {
-            onSelectPhoto(photo);
-          }
-        }}
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={clearLongPress}
-        onPointerLeave={clearLongPress}
-        onContextMenu={(event) => {
-          if (galleryScope === "all") {
-            event.preventDefault();
-          }
-        }}
-        aria-label={
-          galleryScope === "all"
-            ? `Toque duas vezes para curtir. Segure por 2 segundos para abrir foto enviada por ${photo.guestName}`
-            : `Abrir foto enviada por ${photo.guestName}`
-        }
-      >
-        <img
-          src={gridImageUrl}
-          alt={`Foto enviada por ${photo.guestName}`}
-          width={720}
-          height={720}
-          loading={isPriority ? "eager" : "lazy"}
-          decoding="async"
-          fetchPriority={isPriority ? "high" : "auto"}
-        />
-        {galleryScope === "all" && (
-          <span className="photo-like-badge">
-            <Heart aria-hidden="true" />
-            {photo.likeCount}
-          </span>
-        )}
-      </button>
-
-      {canDelete && (
-        <button
-          className="photo-delete-button"
-          type="button"
-          disabled={isDeleting}
-          onClick={() => onDeletePhoto(photo)}
-          aria-label={`Excluir foto enviada por ${photo.guestName}`}
-          title="Excluir foto"
-        >
-          {isDeleting ? (
-            <Loader2 aria-hidden="true" className="spin-icon small" />
-          ) : (
-            <Trash2 aria-hidden="true" />
-          )}
-        </button>
-      )}
-    </div>
-  );
-}
-
-const MemoizedPhotoGridButton = memo(PhotoGridButton);
+export const PhotoGridButton = PhotoGridCard;
 
 export function PhotoPreviewModal({
   photo,

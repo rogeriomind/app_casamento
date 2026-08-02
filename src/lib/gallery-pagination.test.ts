@@ -4,6 +4,7 @@ import {
   decodeGalleryCursor,
   encodeGalleryCursor,
   normalizeGalleryLimit,
+  normalizeGalleryPage,
 } from "@/lib/gallery-pagination";
 
 describe("gallery cursor pagination", () => {
@@ -13,6 +14,11 @@ describe("gallery cursor pagination", () => {
 
   it("caps overly large page sizes", () => {
     expect(normalizeGalleryLimit("500")).toBe(60);
+  });
+
+  it("normalizes invalid page numbers to the first page", () => {
+    expect(normalizeGalleryPage("0")).toBe(1);
+    expect(normalizeGalleryPage("abc")).toBe(1);
   });
 
   it("round-trips createdAt and id cursors", () => {

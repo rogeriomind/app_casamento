@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
-export const DEFAULT_GALLERY_PAGE_SIZE = 12;
+export const PHOTOS_PAGE_SIZE = 12;
+export const DEFAULT_GALLERY_PAGE_SIZE = PHOTOS_PAGE_SIZE;
 export const MAX_GALLERY_PAGE_SIZE = 60;
 
 export type GalleryCursor = {
@@ -15,6 +16,15 @@ export function normalizeGalleryLimit(value: string | null) {
   }
 
   return Math.min(Math.max(Math.floor(parsed), 1), MAX_GALLERY_PAGE_SIZE);
+}
+
+export function normalizeGalleryPage(value: string | null) {
+  const parsed = Number(value ?? 1);
+  if (!Number.isFinite(parsed)) {
+    return 1;
+  }
+
+  return Math.max(Math.floor(parsed), 1);
 }
 
 export function encodeGalleryCursor(photo: { createdAt: Date; id: string }) {

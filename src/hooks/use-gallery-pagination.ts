@@ -2,20 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PaginatedPhotos, PublicPhoto } from "@/types";
-
-const GALLERY_PAGE_SIZE = 12;
+import { PHOTOS_PAGE_SIZE } from "@/lib/gallery-pagination";
 
 function readApiErrorFallback(response: Response) {
   return response
     .json()
     .then((data: { error?: string } | null) => data?.error)
     .catch(() => null);
-}
-
-function encodeClientCursor(photo: PublicPhoto) {
-  const json = JSON.stringify({ createdAt: photo.createdAt, id: photo.id });
-  const base64 = window.btoa(json);
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 export function mergeGalleryPhotos(
@@ -38,34 +31,49 @@ export function mergeGalleryPhotos(
     });
 }
 
+export function prependGalleryPhoto(
+  current: PublicPhoto[],
+  incoming: PublicPhoto,
+) {
+  return [incoming, ...current.filter((photo) => photo.id !== incoming.id)];
+}
+
+export function replaceGalleryPhoto(
+  current: PublicPhoto[],
+  nextPhoto: PublicPhoto,
+) {
+  return current.map((photo) => (photo.id === nextPhoto.id ? nextPhoto : photo));
+}
+
+export function removeGalleryPhoto(current: PublicPhoto[], photoId: string) {
+  return current.filter((photo) => photo.id !== photoId);
+}
+
 export function useGalleryPagination({
   eventId,
   guestSessionId,
-  initialPhotos,
+  initialGallery,
 }: {
   eventId: string;
   guestSessionId: string | null;
-  initialPhotos: PublicPhoto[];
+  initialGallery: PaginatedPhotos;
 }) {
-  const [photos, setPhotos] = useState(initialPhotos);
-  const [nextCursor, setNextCursor] = useState<string | null>(() => {
-    if (typeof window === "undefined" || initialPhotos.length < GALLERY_PAGE_SIZE) {
-      return null;
-    }
-
-    return encodeClientCursor(initialPhotos[initialPhotos.length - 1]);
-  });
-  const [hasNextPage, setHasNextPage] = useState(
-    initialPhotos.length >= GALLERY_PAGE_SIZE,
-  );
+  const [photos, setPhotos] = useState(initialGallery.items);
+  const [currentPage, setCurrentPage] = useState(initialGallery.page);
+  const [nextCursor, setNextCursor] = useState(initialGallery.nextCursor);
+  const [hasNextPage, setHasNextPage] = useState(initialGallery.hasNextPage);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [initialError, setInitialError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [isAutoLoadSupported, setIsAutoLoadSupported] = useState(true);
   const [likedStateSessionId, setLikedStateSessionId] = useState<string | null>(
     null,
   );
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const inFlightRef = useRef(false);
+  const isMountedRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const hasLoadedPhotos = photos.length > 0;
 
@@ -79,12 +87,22 @@ export function useGalleryPagination({
         return;
       }
 
-      if (document.visibilityState !== "visible") {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      ) {
         return;
       }
 
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
       inFlightRef.current = true;
-      setError(null);
+      if (reset) {
+        setInitialError(null);
+      } else {
+        setLoadMoreError(null);
+      }
+
       if (reset) {
         setIsLoading(true);
       } else {
@@ -92,7 +110,10 @@ export function useGalleryPagination({
       }
 
       try {
-        const params = new URLSearchParams({ limit: String(GALLERY_PAGE_SIZE) });
+        const params = new URLSearchParams({
+          limit: String(initialGallery.limit || PHOTOS_PAGE_SIZE),
+          page: String(reset ? 1 : currentPage + 1),
+        });
         if (guestSessionId) {
           params.set("guestSessionId", guestSessionId);
         }
@@ -102,6 +123,7 @@ export function useGalleryPagination({
 
         const response = await fetch(
           `/api/events/${eventId}/photos?${params.toString()}`,
+          { signal: abortController.signal },
         );
         if (!response.ok) {
           throw new Error(
@@ -111,30 +133,90 @@ export function useGalleryPagination({
         }
 
         const data = (await response.json()) as PaginatedPhotos;
+        if (abortController.signal.aborted || !isMountedRef.current) {
+          return;
+        }
+
         setPhotos((current) =>
           reset ? data.items : mergeGalleryPhotos(current, data.items),
         );
+        setCurrentPage(data.page);
         setNextCursor(data.nextCursor);
         setHasNextPage(data.hasNextPage);
         setLikedStateSessionId(guestSessionId);
       } catch (caughtError) {
-        setError(
+        if (
+          caughtError instanceof DOMException &&
+          caughtError.name === "AbortError"
+        ) {
+          return;
+        }
+
+        const message =
           caughtError instanceof Error
             ? caughtError.message
-            : "Nao foi possivel carregar a galeria.",
-        );
+            : "Nao foi possivel carregar a galeria.";
+        if (reset) {
+          setInitialError(message);
+        } else {
+          setLoadMoreError(message);
+        }
       } finally {
+        if (abortControllerRef.current === abortController) {
+          abortControllerRef.current = null;
+        }
         inFlightRef.current = false;
-        setIsLoading(false);
-        setIsLoadingMore(false);
+        if (isMountedRef.current) {
+          setIsLoading(false);
+          setIsLoadingMore(false);
+        }
       }
     },
-    [eventId, guestSessionId, hasNextPage, nextCursor],
+    [
+      eventId,
+      guestSessionId,
+      hasNextPage,
+      currentPage,
+      initialGallery.limit,
+      nextCursor,
+    ],
   );
+
+  const loadMore = useCallback(() => {
+    void fetchPhotos({ reset: false });
+  }, [fetchPhotos]);
 
   const retry = useCallback(() => {
     void fetchPhotos({ reset: photos.length === 0 });
   }, [fetchPhotos, photos.length]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, [eventId, guestSessionId]);
+
+  useEffect(() => {
+    setPhotos(initialGallery.items);
+    setCurrentPage(initialGallery.page);
+    setNextCursor(initialGallery.nextCursor);
+    setHasNextPage(initialGallery.hasNextPage);
+    setInitialError(null);
+    setLoadMoreError(null);
+    setLikedStateSessionId(null);
+  }, [eventId, initialGallery]);
+
+  useEffect(() => {
+    setIsAutoLoadSupported("IntersectionObserver" in window);
+  }, []);
 
   useEffect(() => {
     if (!guestSessionId || likedStateSessionId === guestSessionId) {
@@ -145,6 +227,10 @@ export function useGalleryPagination({
   }, [fetchPhotos, guestSessionId, likedStateSessionId]);
 
   useEffect(() => {
+    if (!isAutoLoadSupported) {
+      return;
+    }
+
     const sentinel = sentinelRef.current;
     if (!sentinel || !hasNextPage) {
       return;
@@ -159,28 +245,36 @@ export function useGalleryPagination({
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [fetchPhotos, hasNextPage]);
+  }, [fetchPhotos, hasNextPage, isAutoLoadSupported]);
 
   return useMemo(
     () => ({
       photos,
       setPhotos,
+      currentPage,
       hasLoadedPhotos,
       isLoading,
       isLoadingMore,
       hasNextPage,
-      error,
+      initialError,
+      loadMoreError,
+      isAutoLoadSupported,
       sentinelRef,
+      loadMore,
       retry,
       refresh: () => fetchPhotos({ reset: true }),
     }),
     [
-      error,
+      currentPage,
       fetchPhotos,
       hasLoadedPhotos,
       hasNextPage,
+      initialError,
+      isAutoLoadSupported,
       isLoading,
       isLoadingMore,
+      loadMore,
+      loadMoreError,
       photos,
       retry,
     ],

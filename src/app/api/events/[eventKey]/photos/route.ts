@@ -5,6 +5,7 @@ import {
   decodeGalleryCursor,
   encodeGalleryCursor,
   normalizeGalleryLimit,
+  normalizeGalleryPage,
 } from "@/lib/gallery-pagination";
 import { parsePhotoTagsInput } from "@/lib/photo-tags";
 import { prisma } from "@/lib/prisma";
@@ -29,6 +30,7 @@ export async function GET(request: Request, context: RouteContext) {
   const { eventKey } = await context.params;
   const { searchParams } = new URL(request.url);
   const limit = normalizeGalleryLimit(searchParams.get("limit"));
+  const page = normalizeGalleryPage(searchParams.get("page"));
   const cursor = decodeGalleryCursor(searchParams.get("cursor"));
   const guestSessionId = searchParams.get("guestSessionId");
 
@@ -48,6 +50,7 @@ export async function GET(request: Request, context: RouteContext) {
       ...buildGalleryCursorWhere(cursor),
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    skip: cursor ? undefined : (page - 1) * limit,
     take: limit + 1,
   });
 
@@ -92,7 +95,7 @@ export async function GET(request: Request, context: RouteContext) {
 
   return NextResponse.json({
     items,
-    page: 1,
+    page,
     limit,
     hasNextPage: photos.length > limit,
     nextCursor:

@@ -25,6 +25,8 @@ export type PublicPhoto = {
   createdAt: string;
 };
 
+export type GalleryViewMode = "grid" | "feed";
+
 export type PaginatedPhotos = {
   items: PublicPhoto[];
   page: number;
