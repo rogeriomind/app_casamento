@@ -1,124 +1,114 @@
-# Deploy GitHub Actions para VPS Contabo
+# Deploy seguro na VPS Contabo
 
-Este projeto usa o fluxo:
+Fluxo: GitHub Actions valida o codigo, empacota a release, envia por SSH e executa `deploy/deploy.sh` em `/opt/apps/app_casamento`.
 
-Local -> GitHub -> GitHub Actions -> VPS Contabo -> Docker Compose.
+## Isolamento
 
-## Arquivos criados
+Use estes valores no `.env` da VPS:
 
-- `.github/workflows/deploy.yml`: roda lint, testes, build e deploy na branch `main`.
-- `Dockerfile`: build da aplicacao Next.js com Prisma.
-- `docker-compose.yml`: sobe `app` e `db` Postgres.
-- `deploy/deploy.sh`: publica o pacote enviado pelo GitHub Actions e recria os containers.
-- `scripts/bootstrap-contabo.sh`: prepara Docker, usuario `deploy`, firewall e pasta da aplicacao.
-- `.env.production.example`: modelo do `.env` que deve existir somente na VPS.
+```env
+APP_PORT=3010
+COMPOSE_PROJECT_NAME=app_casamento
+```
 
-## Secrets do GitHub
+Antes de escolher a porta na VPS:
 
-Cadastre em `Settings -> Secrets and variables -> Actions`:
+```bash
+docker compose ls
+docker ps --format 'table {{.Names}}\t{{.Ports}}'
+ss -lntp
+```
+
+Verifique primeiro `3010`. Se estiver ocupada por outra aplicacao, escolha a primeira livre entre `3011` e `3099`. Nao pare outra aplicacao para liberar porta.
+
+O Compose publica somente `127.0.0.1:${APP_PORT}:3000`, usa rede `app_casamento_internal`, volume `app_casamento_postgres_data` e nao publica PostgreSQL no host.
+
+## Nginx
+
+Use `deploy/nginx/app-casamento.conf.example` como base. Substitua `${APP_PORT}` pela porta escolhida e mantenha o acesso externo apenas por HTTPS nas portas 80/443. Crie backup antes de substituir qualquer arquivo real:
+
+```bash
+sudo cp /etc/nginx/sites-available/app-casamento.conf \
+  /etc/nginx/sites-available/app-casamento.conf.$(date -u +%Y%m%dT%H%M%SZ).bak
+```
+
+## Bunny Storage
+
+No `.env` da VPS, preencha somente valores reais locais:
+
+```env
+BUNNY_STORAGE_ENDPOINT=<NOVO_ENDPOINT_BUNNY>
+BUNNY_STORAGE_PASSWORD=<NOVA_SENHA_STORAGE_ZONE>
+BUNNY_PUBLIC_BASE_URL=<URL_PUBLICA_DA_PULL_ZONE>
+```
+
+Valide antes do deploy:
+
+```bash
+cd /opt/apps/app_casamento
+docker run --rm --env-file .env -v "$PWD":/app -w /app node:24-bookworm-slim \
+  node scripts/check-bunny-storage.mjs
+```
+
+Se apenas endpoint regional/senha mudaram e a Pull Zone continua igual, nao altere URLs gravadas. Se Storage Zone ou Pull Zone mudarem, rode:
+
+```bash
+npm run bunny:migrate -- --dry-run --limit 20
+npm run bunny:migrate -- --resume
+```
+
+O script de migracao nunca remove objetos da origem.
+
+## GitHub Secrets
+
+Configure:
 
 ```text
-VPS_HOST=155.133.27.226
+VPS_HOST=<host>
 VPS_USER=deploy
 VPS_PORT=22
-VPS_SSH_KEY=conteudo_da_chave_privada_ssh
+VPS_SSH_KEY=<chave_privada_ssh>
 APP_PATH=/opt/apps/app_casamento
 ```
 
-O workflow envia um pacote do codigo para a VPS via SSH. A VPS nao precisa clonar o repositorio no GitHub, o que funciona melhor para repositorios privados.
+Nao envie `.env` de producao pelo GitHub Actions.
 
-## Criar chave SSH para o GitHub Actions
+## Bootstrap
 
-No PowerShell local:
+Na VPS, como root:
 
-```powershell
-ssh-keygen -t ed25519 -C "github-actions-app-casamento" -f "$env:USERPROFILE\.ssh\app_casamento_actions"
+```bash
+APP_PATH=/opt/apps/app_casamento bash /root/bootstrap-contabo.sh
 ```
 
-Use o conteudo da chave privada como secret `VPS_SSH_KEY`:
+O firewall abre SSH, 80 e 443. A porta interna da aplicacao nao deve ser aberta publicamente. Para diagnostico temporario:
 
-```powershell
-Get-Content "$env:USERPROFILE\.ssh\app_casamento_actions" -Raw
+```bash
+sudo ufw allow <APP_PORT>/tcp
+sudo ufw delete allow <APP_PORT>/tcp
 ```
 
-Depois copie a chave publica para a VPS:
+## Preflight do deploy
 
-```powershell
-scp "$env:USERPROFILE\.ssh\app_casamento_actions.pub" root@155.133.27.226:/root/app_casamento_actions.pub
-```
+O script de deploy:
 
-## Preparar a VPS
+- exige `APP_PATH`, `.env`, `APP_PORT` e `COMPOSE_PROJECT_NAME`;
+- executa `scripts/check-vps-port.sh`;
+- executa `docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file "$APP_PATH/.env" config`;
+- valida Bunny Storage;
+- roda preflight Node em container temporario;
+- registra `df -h` e `docker system df`;
+- faz backup de `.env` e `pg_dump` em `/opt/backups/app_casamento`;
+- sobe containers somente com projeto Compose explicito;
+- faz healthcheck em `http://127.0.0.1:${APP_PORT}/api/health`;
+- preserva releases recentes em `.releases`.
 
-Copie o script para a VPS e rode como root:
+O deploy aborta antes de subir containers se a porta estiver ocupada por outro processo/projeto.
 
-```powershell
-scp scripts/bootstrap-contabo.sh root@155.133.27.226:/root/bootstrap-contabo.sh
-ssh root@155.133.27.226 "APP_PATH=/opt/apps/app_casamento APP_PORT=3010 bash /root/bootstrap-contabo.sh"
-```
-
-Associe a chave publica ao usuario `deploy`:
-
-```powershell
-ssh root@155.133.27.226 "install -d -m 700 -o deploy -g deploy /home/deploy/.ssh && cat /root/app_casamento_actions.pub > /home/deploy/.ssh/authorized_keys && chown deploy:deploy /home/deploy/.ssh/authorized_keys && chmod 600 /home/deploy/.ssh/authorized_keys"
-```
-
-A senha root deve ser usada apenas no bootstrap inicial. Nao cadastre senha da VPS como secret do GitHub.
-
-## Criar o .env de producao na VPS
-
-Na VPS:
+## Validacao
 
 ```bash
 cd /opt/apps/app_casamento
-nano .env
+COMPOSE_PROJECT_NAME=app_casamento docker compose --env-file .env ps
+curl -fsS "http://127.0.0.1:${APP_PORT}/api/health"
 ```
-
-Use `.env.production.example` como referencia. Nao envie `.env` para o GitHub.
-
-Para producao com o Postgres do `docker-compose.yml`, o `DATABASE_URL` deve apontar para o host `db`.
-
-## Primeiro push
-
-Se o `git` nao estiver instalado no Windows:
-
-```powershell
-winget install --id Git.Git -e
-```
-
-Depois reabra o terminal e rode:
-
-```bash
-git init
-git add .
-git commit -m "chore: initial deploy pipeline"
-git branch -M main
-git remote add origin https://github.com/rogeriomind/app_casamento.git
-git push -u origin main
-```
-
-O push para `main` dispara a esteira.
-
-## Validar na VPS
-
-```bash
-cd /opt/apps/app_casamento
-docker compose ps
-docker compose logs -f app
-```
-
-Se `APP_PORT=3010`, o app deve responder em:
-
-```text
-http://155.133.27.226:3010
-```
-
-## Rollback manual
-
-Na VPS:
-
-```bash
-cd /opt/apps/app_casamento
-docker compose logs -f app
-```
-
-Para rollback por commit, rode novamente o workflow no GitHub a partir do commit desejado.

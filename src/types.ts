@@ -25,11 +25,14 @@ export type PublicPhoto = {
   createdAt: string;
 };
 
+export type GalleryViewMode = "grid" | "feed";
+
 export type PaginatedPhotos = {
   items: PublicPhoto[];
   page: number;
   limit: number;
   hasNextPage: boolean;
+  nextCursor: string | null;
 };
 
 export type ApiError = {

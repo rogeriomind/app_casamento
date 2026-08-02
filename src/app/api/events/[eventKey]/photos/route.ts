@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api";
-import { getBunnyPublicBaseUrl } from "@/lib/bunny-storage";
+import {
+  buildGalleryCursorWhere,
+  decodeGalleryCursor,
+  encodeGalleryCursor,
+  normalizeGalleryLimit,
+  normalizeGalleryPage,
+} from "@/lib/gallery-pagination";
 import { parsePhotoTagsInput } from "@/lib/photo-tags";
 import { prisma } from "@/lib/prisma";
 import { processAndStorePhoto, UploadValidationError } from "@/lib/photo-storage";
@@ -23,11 +29,9 @@ function normalizeNameForOwnership(value: string) {
 export async function GET(request: Request, context: RouteContext) {
   const { eventKey } = await context.params;
   const { searchParams } = new URL(request.url);
-  const page = Math.max(Number(searchParams.get("page") ?? 1), 1);
-  const limit = Math.min(
-    Math.max(Number(searchParams.get("limit") ?? 30), 1),
-    60,
-  );
+  const limit = normalizeGalleryLimit(searchParams.get("limit"));
+  const page = normalizeGalleryPage(searchParams.get("page"));
+  const cursor = decodeGalleryCursor(searchParams.get("cursor"));
   const guestSessionId = searchParams.get("guestSessionId");
 
   const event = await prisma.event.findUnique({
@@ -39,17 +43,14 @@ export async function GET(request: Request, context: RouteContext) {
     return jsonError("Evento indisponível.", 404, "EVENT_UNAVAILABLE");
   }
 
-  const bunnyPublicUrlPrefix = `${getBunnyPublicBaseUrl()}/`;
   const photos = await prisma.photo.findMany({
     where: {
       eventId: event.id,
       status: "published",
-      imageUrl: {
-        startsWith: bunnyPublicUrlPrefix,
-      },
+      ...buildGalleryCursorWhere(cursor),
     },
-    orderBy: { createdAt: "desc" },
-    skip: (page - 1) * limit,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    skip: cursor ? undefined : (page - 1) * limit,
     take: limit + 1,
   });
 
@@ -87,14 +88,18 @@ export async function GET(request: Request, context: RouteContext) {
         photo,
         likedPhotoIds.has(photo.id),
         normalizeNameForOwnership(photo.guestName) === currentGuestName,
+        { preferObjectPathUrls: true },
       ),
     );
+  const lastPhoto = items.length > 0 ? photos[items.length - 1] : null;
 
   return NextResponse.json({
     items,
     page,
     limit,
     hasNextPage: photos.length > limit,
+    nextCursor:
+      photos.length > limit && lastPhoto ? encodeGalleryCursor(lastPhoto) : null,
   });
 }
 

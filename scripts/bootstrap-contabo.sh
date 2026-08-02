@@ -3,7 +3,6 @@ set -euo pipefail
 
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
 APP_PATH="${APP_PATH:-/opt/apps/app_casamento}"
-APP_PORT="${APP_PORT:-3010}"
 SSH_PORT="${SSH_PORT:-22}"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -66,7 +65,6 @@ chown -R "$DEPLOY_USER:$DEPLOY_USER" "$APP_PATH"
 
 echo "Configurando firewall basico..."
 ufw allow "$SSH_PORT/tcp"
-ufw allow "$APP_PORT/tcp"
 ufw allow 80/tcp
 ufw allow 443/tcp
 ufw --force enable
@@ -74,4 +72,5 @@ ufw --force enable
 echo "Bootstrap finalizado."
 echo "Usuario: $DEPLOY_USER"
 echo "App path: $APP_PATH"
-echo "Porta app: $APP_PORT"
+echo "Firewall: SSH, 80 e 443 abertos. A porta interna do app deve ficar atras do Nginx."
+echo "Diagnostico temporario: para abrir APP_PORT publicamente, rode manualmente 'ufw allow <APP_PORT>/tcp' e remova com 'ufw delete allow <APP_PORT>/tcp' ao terminar."

@@ -63,6 +63,7 @@ model Photo {
   likes               PhotoLike[]
 
   @@index([eventId, status, createdAt])
+  @@index([eventId, status, createdAt, id])
   @@index([guestSessionId])
 }
 

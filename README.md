@@ -12,9 +12,9 @@ APP_BASE_URL="http://localhost:3000"
 ADMIN_API_KEY="troque-esta-chave-admin"
 CLIENT_HASH_SECRET="troque-este-segredo-longo"
 
-BUNNY_STORAGE_ENDPOINT="https://br.storage.bunnycdn.com/productpulse"
-BUNNY_STORAGE_PASSWORD="sua-storage-zone-password"
-BUNNY_PUBLIC_BASE_URL="https://productpulse.b-cdn.net"
+BUNNY_STORAGE_ENDPOINT="<NOVO_ENDPOINT_BUNNY>"
+BUNNY_STORAGE_PASSWORD="<NOVA_SENHA_STORAGE_ZONE>"
+BUNNY_PUBLIC_BASE_URL="<URL_PUBLICA_DA_PULL_ZONE>"
 ```
 
 ```powershell
@@ -80,6 +80,7 @@ Invoke-RestMethod `
 ## Bunny.net Storage
 
 Use a senha da Storage Zone em `BUNNY_STORAGE_PASSWORD`, nao a API key da conta Bunny.
+Nunca exponha essa senha como `NEXT_PUBLIC_`, em logs, endpoints ou arquivos versionados.
 
 Novos uploads sao organizados por cliente:
 
@@ -87,6 +88,20 @@ Novos uploads sao organizados por cliente:
 clients/{clientHash}/photos/{uuid}.jpg
 clients/{clientHash}/thumbnails/{uuid}-thumb.jpg
 ```
+
+Antes do deploy ou apos trocar endpoint/senha, valide a Storage Zone:
+
+```powershell
+npm.cmd run bunny:check
+```
+
+Se a Pull Zone ou Storage Zone mudar, rode primeiro a migracao em dry-run:
+
+```powershell
+npm.cmd run bunny:migrate -- --dry-run --limit 10
+```
+
+O migrador nao apaga objetos antigos automaticamente.
 
 ## Scripts
 
@@ -102,6 +117,7 @@ clients/{clientHash}/thumbnails/{uuid}-thumb.jpg
 
 A esteira GitHub Actions -> VPS Contabo esta documentada em `docs/deploy-contabo.md`.
 O `.env` de producao deve existir somente na VPS e pode ser criado a partir de `.env.production.example`.
+Em producao, a aplicacao fica isolada em `/opt/apps/app_casamento` com `COMPOSE_PROJECT_NAME=app_casamento`, rede `app_casamento_internal` e volume `app_casamento_postgres_data`.
 
 ## Recursos
 
@@ -109,7 +125,7 @@ O `.env` de producao deve existir somente na VPS e pode ser criado a partir de `
 - Link publico por cliente em `/e/{clientHash}`.
 - Compatibilidade com o slug legado do demo.
 - Sessao local por aparelho e evento.
-- Heartbeat para usuarios online nos ultimos 2 minutos.
+- Heartbeat para usuarios online nos ultimos 2 minutos, com intervalo de cerca de 60 segundos e reducao de escritas redundantes.
 - Metricas administrativas de fotos, usuarios online e usuarios que entraram.
 - Upload da galeria do celular e captura por camera.
 - Persistencia em Postgres via Prisma.

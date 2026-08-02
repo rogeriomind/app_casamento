@@ -101,7 +101,7 @@ async function main() {
       eventId: event.id,
       imageUrl: {
         not: {
-          startsWith: `${process.env.BUNNY_PUBLIC_BASE_URL ?? "https://productpulse.b-cdn.net"}/`,
+          startsWith: `${process.env.BUNNY_PUBLIC_BASE_URL ?? "https://cdn.example.com"}/`,
         },
       },
     },
