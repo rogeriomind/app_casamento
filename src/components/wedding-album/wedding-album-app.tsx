@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   Tag,
   User,
+  Video,
   X,
 } from "lucide-react";
 import Image from "next/image";
@@ -45,6 +46,7 @@ import { useGalleryViewMode } from "@/hooks/use-gallery-view-mode";
 import { useGuestSession } from "@/hooks/use-guest-session";
 import { usePhotoLikes } from "@/hooks/use-photo-likes";
 import {
+  type UploadFileSelection,
   type UploadItem,
   usePhotoUploadQueue,
 } from "@/hooks/use-photo-upload-queue";
@@ -55,10 +57,13 @@ import {
   normalizeTag,
 } from "@/lib/photo-tags";
 import {
+  MAX_VIDEO_DURATION_SECONDS,
   guestNameSchema,
   normalizeGuestName,
   validateImageFileInput,
+  validateVideoFileInput,
 } from "@/lib/validators";
+import { readVideoDurationSeconds } from "@/lib/video-upload-client";
 import type {
   ApiError,
   GalleryViewMode,
@@ -82,6 +87,22 @@ const COUPLE_ILLUSTRATION_BLUR_DATA_URL =
 
 function photoMatchesTag(photo: PublicPhoto, normalizedTagSearch: string) {
   return photo.tags.some((tag) => normalizeTag(tag).includes(normalizedTagSearch));
+}
+
+function getSelectedMediaType(file: File): PendingUpload["mediaType"] | null {
+  const mimeType = file.type.toLowerCase();
+  const imageValidation = validateImageFileInput(file);
+  const videoValidation = validateVideoFileInput(file);
+
+  if (mimeType.startsWith("video/") || (videoValidation.ok && !imageValidation.ok)) {
+    return "video";
+  }
+
+  if (mimeType.startsWith("image/") || imageValidation.ok) {
+    return "image";
+  }
+
+  return null;
 }
 
 function formatUploadStatus(status: PendingUpload["status"]) {
@@ -122,12 +143,14 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
   );
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [successPhoto, setSuccessPhoto] = useState<PublicPhoto | null>(null);
   const [selectedPhoto, setSelectedPhoto] = useState<PublicPhoto | null>(null);
   const [highlightedPhotoId, setHighlightedPhotoId] = useState<string | null>(
     null,
   );
   const cameraInputId = `${event.id}-camera-input`;
+  const videoInputId = `${event.id}-video-input`;
   const galleryInputId = `${event.id}-gallery-input`;
   const { session, deviceId, isHydrated, submitGuestName, signOut } =
     useGuestSession(event.id);
@@ -216,7 +239,9 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
       return;
     }
 
-    const confirmed = window.confirm("Excluir esta foto?");
+    const confirmed = window.confirm(
+      photo.mediaType === "video" ? "Excluir este video?" : "Excluir esta foto?",
+    );
     if (!confirmed) {
       return;
     }
@@ -244,10 +269,11 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
       setSelectedPhoto((current) => (current?.id === photo.id ? null : current));
       setSuccessPhoto((current) => (current?.id === photo.id ? null : current));
     } catch (error) {
+      setUploadNotice(null);
       setUploadError(
         error instanceof Error
           ? error.message
-          : "Nao foi possivel excluir a foto.",
+          : "Nao foi possivel excluir a midia.",
       );
     } finally {
       setDeletingPhotoIds((current) => {
@@ -284,6 +310,7 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
     }
 
     setUploadError(null);
+    setUploadNotice(null);
     setIsSheetOpen(false);
 
     try {
@@ -305,6 +332,9 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
         return;
       }
 
+      const uploadedVideoCount = uploadQueue.items.filter(
+        (item) => item.mediaType === "video",
+      ).length;
       uploadQueue.clear();
       if (summary.successCount === 1 && summary.firstPhoto) {
         setSuccessPhoto(summary.firstPhoto);
@@ -312,6 +342,11 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
         return;
       }
 
+      if (uploadedVideoCount > 0) {
+        setUploadNotice(
+          "Video enviado. Ele aparecera na galeria apos o processamento.",
+        );
+      }
       setStep("gallery");
     } catch (error) {
       setUploadError(
@@ -322,19 +357,39 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
     }
   }
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     const isGalleryInput = event.currentTarget.id === galleryInputId;
+    const isVideoInput = event.currentTarget.id === videoInputId;
     event.target.value = "";
 
     if (files.length === 0) {
       return;
     }
 
-    const selectedFiles = isGalleryInput ? files : files.slice(0, 1);
+    const selectedFiles =
+      isGalleryInput && !isVideoInput ? files : files.slice(0, 1);
+    const selectedMediaTypes = selectedFiles.map(getSelectedMediaType);
+    const hasVideo = selectedMediaTypes.includes("video");
+    const hasImage = selectedMediaTypes.includes("image");
 
-    if (isGalleryInput && selectedFiles.length > MAX_GALLERY_UPLOADS) {
+    if (selectedMediaTypes.some((mediaType) => mediaType === null)) {
       setIsSheetOpen(false);
+      setUploadNotice(null);
+      setUploadError("Selecione fotos ou um video MP4, MOV ou WebM.");
+      return;
+    }
+
+    if (hasVideo && (hasImage || selectedFiles.length > 1)) {
+      setIsSheetOpen(false);
+      setUploadNotice(null);
+      setUploadError("Selecione ate 10 fotos ou apenas 1 video por vez.");
+      return;
+    }
+
+    if (!hasVideo && isGalleryInput && selectedFiles.length > MAX_GALLERY_UPLOADS) {
+      setIsSheetOpen(false);
+      setUploadNotice(null);
       setUploadError(`Selecione ate ${MAX_GALLERY_UPLOADS} fotos por vez.`);
       return;
     }
@@ -344,21 +399,49 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
       return;
     }
 
-    const invalidFile = selectedFiles
-      .map((file) => ({ file, validation: validateImageFileInput(file) }))
-      .find(({ validation }) => !validation.ok);
+    const uploadSelections: UploadFileSelection[] = [];
 
-    if (invalidFile && !invalidFile.validation.ok) {
-      setIsSheetOpen(false);
-      setUploadError(
-        `${invalidFile.file.name || "Uma foto"}: ${invalidFile.validation.message}`,
-      );
-      return;
+    for (const [index, file] of selectedFiles.entries()) {
+      const mediaType = selectedMediaTypes[index];
+      if (mediaType === "video") {
+        const durationSeconds = await readVideoDurationSeconds(file);
+        const validation = validateVideoFileInput({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          durationSeconds,
+        });
+
+        if (!validation.ok) {
+          setIsSheetOpen(false);
+          setUploadNotice(null);
+          setUploadError(
+            `${file.name || "Um video"}: ${validation.message}`,
+          );
+          return;
+        }
+
+        uploadSelections.push({ file, mediaType, durationSeconds });
+        continue;
+      }
+
+      const validation = validateImageFileInput(file);
+      if (!validation.ok) {
+        setIsSheetOpen(false);
+        setUploadNotice(null);
+        setUploadError(
+          `${file.name || "Uma foto"}: ${validation.message}`,
+        );
+        return;
+      }
+
+      uploadSelections.push({ file, mediaType: "image" as const });
     }
 
     setUploadError(null);
+    setUploadNotice(null);
     setIsSheetOpen(false);
-    uploadQueue.setFiles(selectedFiles);
+    uploadQueue.setFiles(uploadSelections);
     setStep("tagging");
   }
 
@@ -399,6 +482,7 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
     setSuccessPhoto(null);
     setIsSheetOpen(false);
     setUploadError(null);
+    setUploadNotice(null);
     uploadQueue.clear();
     setPhotos((current) =>
       current.map((photo) => ({
@@ -419,17 +503,27 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
         capture="environment"
         aria-label="Tirar foto"
         tabIndex={-1}
-        onChange={handleFileChange}
+        onChange={(event) => void handleFileChange(event)}
+      />
+      <input
+        id={videoInputId}
+        className="hidden-input"
+        type="file"
+        accept="video/*"
+        capture="environment"
+        aria-label="Gravar video"
+        tabIndex={-1}
+        onChange={(event) => void handleFileChange(event)}
       />
       <input
         id={galleryInputId}
         className="hidden-input"
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         multiple
-        aria-label="Enviar foto da galeria"
+        aria-label="Enviar da galeria"
         tabIndex={-1}
-        onChange={handleFileChange}
+        onChange={(event) => void handleFileChange(event)}
       />
 
       {step === "welcome" && (
@@ -461,6 +555,7 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
           isUploading={uploadQueue.isUploading}
           deletingPhotoIds={deletingPhotoIds}
           error={galleryError ?? uploadError}
+          notice={uploadNotice}
           loadMoreError={loadMoreError}
           sentinelRef={sentinelRef}
           onAddPhoto={handleAddPhoto}
@@ -506,6 +601,7 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
         isOpen={isSheetOpen}
         isUploading={uploadQueue.isUploading}
         cameraInputId={cameraInputId}
+        videoInputId={videoInputId}
         galleryInputId={galleryInputId}
         onClose={() => setIsSheetOpen(false)}
       />
@@ -736,6 +832,13 @@ export function TagConfirmationScreen({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const uploadCount = pendingUploads.length;
   const isMultiple = uploadCount > 1;
+  const hasVideo = pendingUploads.some((upload) => upload.mediaType === "video");
+  const mediaLabel = hasVideo ? "video" : "foto";
+  const selectedCountLabel = hasVideo
+    ? "1 video selecionado"
+    : `${uploadCount} ${
+        uploadCount === 1 ? "foto selecionada" : "fotos selecionadas"
+      }`;
 
   function addTag(value: string) {
     const tags = normalizePhotoTags(value.split(/[,\s]+/));
@@ -778,7 +881,9 @@ export function TagConfirmationScreen({
       <header className="tag-confirm-header">
         <h1>Adicionar tags</h1>
         <p>
-          {isMultiple
+          {hasVideo
+            ? "Adicione tags que descrevem este video."
+            : isMultiple
             ? "Adicione tags que descrevem estas fotos."
             : "Adicione tags que descrevem esta foto."}
         </p>
@@ -788,10 +893,20 @@ export function TagConfirmationScreen({
         <div className="tag-preview-grid">
           {pendingUploads.map((upload, index) => (
             <div className="tag-preview-item" key={upload.id}>
-              <img
-                src={upload.previewUrl}
-                alt={`Pre-visualizacao da foto ${index + 1}`}
-              />
+              {upload.mediaType === "video" ? (
+                <div className="tag-video-preview">
+                  <Video aria-hidden="true" />
+                  <span>{upload.file.name || `Video ${index + 1}`}</span>
+                  {upload.durationSeconds ? (
+                    <small>{Math.ceil(upload.durationSeconds)}s</small>
+                  ) : null}
+                </div>
+              ) : (
+                <img
+                  src={upload.previewUrl}
+                  alt={`Pre-visualizacao da foto ${index + 1}`}
+                />
+              )}
               <div className="upload-preview-status">
                 <span>{formatUploadStatus(upload.status)}</span>
                 <progress value={upload.progress} max={100} />
@@ -821,11 +936,13 @@ export function TagConfirmationScreen({
           ))}
         </div>
         <span className="tag-photo-count">
-          {uploadCount} {uploadCount === 1 ? "foto selecionada" : "fotos selecionadas"}
+          {selectedCountLabel}
         </span>
         <p>
           <Tag aria-hidden="true" />
-          {isMultiple
+          {hasVideo
+            ? "As tags serao aplicadas ao video selecionado."
+            : isMultiple
             ? "As tags serao aplicadas em todas as fotos selecionadas."
             : "Adicione tags para ajudar seus convidados a encontrar esta foto."}
         </p>
@@ -904,7 +1021,7 @@ export function TagConfirmationScreen({
 
         <p className="tag-tip">
           <Lightbulb aria-hidden="true" />
-          Use tags para tornar sua foto mais facil de encontrar.
+          Use tags para tornar seu {mediaLabel} mais facil de encontrar.
         </p>
 
         <button
@@ -918,6 +1035,8 @@ export function TagConfirmationScreen({
               <Loader2 aria-hidden="true" className="spin-icon small" />
               Publicando
             </>
+          ) : hasVideo ? (
+            "Publicar video"
           ) : isMultiple ? (
             "Publicar fotos"
           ) : (
@@ -940,6 +1059,7 @@ export function GalleryScreen({
   isUploading,
   deletingPhotoIds,
   error,
+  notice,
   loadMoreError,
   sentinelRef,
   onAddPhoto,
@@ -960,6 +1080,7 @@ export function GalleryScreen({
   isUploading: boolean;
   deletingPhotoIds: Set<string>;
   error: string | null;
+  notice: string | null;
   loadMoreError: string | null;
   sentinelRef: React.RefCallback<HTMLDivElement>;
   onAddPhoto: () => void;
@@ -1155,13 +1276,14 @@ export function GalleryScreen({
       {isUploading && (
         <div className="upload-toast" role="status">
           <Loader2 aria-hidden="true" className="spin-icon small" />
-          Enviando foto...
+          Enviando...
         </div>
       )}
+      {notice && <p className="gallery-notice">{notice}</p>}
 
       <button className="floating-add-button" type="button" onClick={onAddPhoto}>
         <span aria-hidden="true">+</span>
-        Adicionar foto
+        Adicionar
       </button>
 
       <nav className="bottom-nav" aria-label="Navegacao">
@@ -1286,7 +1408,10 @@ export function PhotoPreviewModal({
     return null;
   }
 
+  const isVideo = photo.mediaType === "video";
+  const mediaLabel = isVideo ? "video" : "foto";
   const downloadName = `foto-casamento-${photo.id}.jpg`;
+  const imageUrl = photo.imageUrl ?? photo.thumbnailUrl;
 
   return (
     <div
@@ -1298,12 +1423,12 @@ export function PhotoPreviewModal({
         className="photo-preview"
         role="dialog"
         aria-modal="true"
-        aria-label="Pre-visualizar foto"
+        aria-label={`Pre-visualizar ${mediaLabel}`}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="preview-header">
           <div>
-            <p>Foto enviada por</p>
+            <p>{isVideo ? "Video enviado por" : "Foto enviada por"}</p>
             <strong>{photo.guestName}</strong>
           </div>
           <button
@@ -1316,17 +1441,40 @@ export function PhotoPreviewModal({
           </button>
         </header>
 
-        <img
-          className="preview-photo"
-          src={photo.imageUrl}
-          alt={`Foto enviada por ${photo.guestName}`}
-        />
+        {isVideo ? (
+          photo.videoEmbedUrl ? (
+            <iframe
+              key={photo.id}
+              className="preview-video-player"
+              src={photo.videoEmbedUrl}
+              title={`Video enviado por ${photo.guestName}`}
+              allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          ) : (
+            <div className="preview-media-placeholder">
+              <Video aria-hidden="true" />
+              <span>Video indisponivel</span>
+            </div>
+          )
+        ) : imageUrl ? (
+          <img
+            className="preview-photo"
+            src={imageUrl}
+            alt={`Foto enviada por ${photo.guestName}`}
+          />
+        ) : (
+          <div className="preview-media-placeholder">
+            <ImageIcon aria-hidden="true" />
+            <span>Foto indisponivel</span>
+          </div>
+        )}
 
         <button
           className={`preview-like-button ${photo.isLiked ? "liked" : ""}`}
           type="button"
           onClick={() => onToggleLike(photo)}
-          aria-label={photo.isLiked ? "Remover curtida" : "Curtir foto"}
+          aria-label={photo.isLiked ? "Remover curtida" : `Curtir ${mediaLabel}`}
         >
           <span>
             <Heart aria-hidden="true" />
@@ -1335,16 +1483,18 @@ export function PhotoPreviewModal({
           <small>{photo.likeCount}</small>
         </button>
 
-        <a
-          className="download-button"
-          href={photo.imageUrl}
-          download={downloadName}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <Download aria-hidden="true" />
-          Baixar foto
-        </a>
+        {!isVideo && imageUrl && (
+          <a
+            className="download-button"
+            href={imageUrl}
+            download={downloadName}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Download aria-hidden="true" />
+            Baixar foto
+          </a>
+        )}
       </section>
     </div>
   );
@@ -1364,12 +1514,14 @@ export function AddPhotoSheet({
   isOpen,
   isUploading,
   cameraInputId,
+  videoInputId,
   galleryInputId,
   onClose,
 }: {
   isOpen: boolean;
   isUploading: boolean;
   cameraInputId: string;
+  videoInputId: string;
   galleryInputId: string;
   onClose: () => void;
 }) {
@@ -1407,6 +1559,23 @@ export function AddPhotoSheet({
 
         <label
           className={`sheet-option ${isUploading ? "disabled" : ""}`}
+          htmlFor={videoInputId}
+          aria-disabled={isUploading}
+          onClick={(event) => {
+            if (isUploading) {
+              event.preventDefault();
+            }
+          }}
+        >
+          <span>
+            <Video aria-hidden="true" />
+          </span>
+          <strong>Gravar video</strong>
+          <small>Capture ate {MAX_VIDEO_DURATION_SECONDS} segundos</small>
+        </label>
+
+        <label
+          className={`sheet-option ${isUploading ? "disabled" : ""}`}
           htmlFor={galleryInputId}
           aria-disabled={isUploading}
           onClick={(event) => {
@@ -1419,7 +1588,9 @@ export function AddPhotoSheet({
             <ImageIcon aria-hidden="true" />
           </span>
           <strong>Enviar da galeria</strong>
-          <small>Selecione ate {MAX_GALLERY_UPLOADS} fotos do seu celular</small>
+          <small>
+            Ate {MAX_GALLERY_UPLOADS} fotos ou 1 video do seu celular
+          </small>
         </label>
 
         <button className="sheet-cancel" type="button" onClick={onClose}>
@@ -1437,6 +1608,8 @@ export function SuccessScreen({
   photo: PublicPhoto;
   onSeeGallery: () => void;
 }) {
+  const imageUrl = photo.imageUrl ?? photo.thumbnailUrl;
+
   return (
     <div className="screen success-screen">
       <header className="success-header">
@@ -1452,11 +1625,18 @@ export function SuccessScreen({
         </button>
       </header>
 
-      <img
-        className="success-photo"
-        src={photo.imageUrl}
-        alt={`Foto enviada por ${photo.guestName}`}
-      />
+      {imageUrl ? (
+        <img
+          className="success-photo"
+          src={imageUrl}
+          alt={`Foto enviada por ${photo.guestName}`}
+        />
+      ) : (
+        <div className="preview-media-placeholder">
+          <ImageIcon aria-hidden="true" />
+          <span>Foto indisponivel</span>
+        </div>
+      )}
 
       <div className="success-message">
         <span>

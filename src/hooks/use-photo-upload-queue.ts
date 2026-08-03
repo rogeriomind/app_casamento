@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { normalizePhotoTags } from "@/lib/photo-tags";
-import { validateImageFileInput } from "@/lib/validators";
+import {
+  validateImageFileInput,
+  validateVideoFileInput,
+} from "@/lib/validators";
+import {
+  createBunnyTusUploadController,
+  initBunnyVideoUpload,
+  type BunnyTusUploadController,
+} from "@/lib/video-upload-client";
 import type { PublicPhoto } from "@/types";
 
 export type UploadItemStatus =
@@ -17,11 +25,19 @@ export type UploadItemStatus =
 export type UploadItem = {
   id: string;
   file: File;
+  mediaType: "image" | "video";
   previewUrl: string;
   status: UploadItemStatus;
   progress: number;
+  durationSeconds?: number | null;
   error?: string;
   publishedPhotoId?: string;
+};
+
+export type UploadFileSelection = {
+  file: File;
+  mediaType: UploadItem["mediaType"];
+  durationSeconds?: number | null;
 };
 
 type UploadState = {
@@ -30,7 +46,7 @@ type UploadState = {
 };
 
 type UploadAction =
-  | { type: "set-files"; files: File[] }
+  | { type: "set-files"; selections: UploadFileSelection[] }
   | { type: "clear" }
   | { type: "upload-start" }
   | { type: "upload-end" }
@@ -59,12 +75,14 @@ function reducer(state: UploadState, action: UploadAction): UploadState {
       state.items.forEach((item) => URL.revokeObjectURL(item.previewUrl));
       return {
         isUploading: false,
-        items: action.files.map((file) => ({
+        items: action.selections.map((selection) => ({
           id: createUploadId(),
-          file,
-          previewUrl: URL.createObjectURL(file),
+          file: selection.file,
+          mediaType: selection.mediaType,
+          previewUrl: URL.createObjectURL(selection.file),
           status: "waiting",
           progress: 0,
+          durationSeconds: selection.durationSeconds,
         })),
       };
     case "clear":
@@ -84,9 +102,14 @@ function reducer(state: UploadState, action: UploadAction): UploadState {
   }
 }
 
-function getUploadConcurrency() {
+function getUploadConcurrency(queue: UploadItem[]) {
+  if (queue.some((item) => item.mediaType === "video")) {
+    return 1;
+  }
+
   const isLikelyMobile =
-    navigator.maxTouchPoints > 0 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    navigator.maxTouchPoints > 0 ||
+    /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
   return isLikelyMobile ? 2 : 3;
 }
 
@@ -124,6 +147,7 @@ export function usePhotoUploadQueue({
   });
   const itemsRef = useRef(state.items);
   const xhrsRef = useRef(new Map<string, XMLHttpRequest>());
+  const tusUploadsRef = useRef(new Map<string, BunnyTusUploadController>());
 
   useEffect(() => {
     itemsRef.current = state.items;
@@ -131,19 +155,23 @@ export function usePhotoUploadQueue({
 
   useEffect(() => {
     const xhrs = xhrsRef.current;
+    const tusUploads = tusUploadsRef.current;
     return () => {
       xhrs.forEach((xhr) => xhr.abort());
+      tusUploads.forEach((upload) => upload.cleanup());
       itemsRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
     };
   }, []);
 
-  const setFiles = useCallback((files: File[]) => {
-    dispatch({ type: "set-files", files });
+  const setFiles = useCallback((selections: UploadFileSelection[]) => {
+    dispatch({ type: "set-files", selections });
   }, []);
 
   const clear = useCallback(() => {
     xhrsRef.current.forEach((xhr) => xhr.abort());
     xhrsRef.current.clear();
+    tusUploadsRef.current.forEach((upload) => upload.cleanup());
+    tusUploadsRef.current.clear();
     dispatch({ type: "clear" });
   }, []);
 
@@ -153,6 +181,11 @@ export function usePhotoUploadQueue({
       xhr.abort();
       xhrsRef.current.delete(itemId);
     }
+    const tusUpload = tusUploadsRef.current.get(itemId);
+    if (tusUpload) {
+      void tusUpload.cancel().catch(() => undefined);
+      tusUploadsRef.current.delete(itemId);
+    }
     dispatch({
       type: "item-update",
       id: itemId,
@@ -160,7 +193,7 @@ export function usePhotoUploadQueue({
     });
   }, []);
 
-  const uploadItem = useCallback(
+  const uploadImageItem = useCallback(
     (item: UploadItem, guestSessionId: string, tags: string[]) =>
       new Promise<PublicPhoto>((resolve, reject) => {
         const validation = validateImageFileInput(item.file);
@@ -209,7 +242,19 @@ export function usePhotoUploadQueue({
         xhr.onload = () => {
           xhrsRef.current.delete(item.id);
           if (xhr.status >= 200 && xhr.status < 300) {
-            const photo = JSON.parse(xhr.responseText) as PublicPhoto;
+            let photo: PublicPhoto;
+            try {
+              photo = JSON.parse(xhr.responseText) as PublicPhoto;
+            } catch {
+              const error = "Nao foi possivel ler a resposta do envio.";
+              dispatch({
+                type: "item-update",
+                id: item.id,
+                patch: { status: "error", progress: 0, error },
+              });
+              reject(new Error(error));
+              return;
+            }
             dispatch({
               type: "item-update",
               id: item.id,
@@ -269,6 +314,130 @@ export function usePhotoUploadQueue({
     [eventId, onPhotoPublished],
   );
 
+  const uploadVideoItem = useCallback(
+    async (item: UploadItem, guestSessionId: string, tags: string[]) => {
+      const validation = validateVideoFileInput({
+        name: item.file.name,
+        type: item.file.type,
+        size: item.file.size,
+        durationSeconds: item.durationSeconds,
+      });
+      if (!validation.ok) {
+        dispatch({
+          type: "item-update",
+          id: item.id,
+          patch: {
+            status: "error",
+            progress: 0,
+            error: validation.message,
+          },
+        });
+        throw new Error(validation.message);
+      }
+
+      dispatch({
+        type: "item-update",
+        id: item.id,
+        patch: { status: "preparing", progress: 0, error: undefined },
+      });
+
+      let init: Awaited<ReturnType<typeof initBunnyVideoUpload>>;
+      try {
+        init = await initBunnyVideoUpload({
+          eventId,
+          guestSessionId,
+          file: item.file,
+          tags,
+          durationSeconds: item.durationSeconds ?? null,
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Nao foi possivel iniciar o envio do video.";
+        dispatch({
+          type: "item-update",
+          id: item.id,
+          patch: { status: "error", progress: 0, error: message },
+        });
+        throw new Error(message);
+      }
+
+      const latestAfterInit = itemsRef.current.find(
+        (entry) => entry.id === item.id,
+      );
+      if (latestAfterInit?.status === "cancelled") {
+        throw new Error("Upload cancelado.");
+      }
+
+      return new Promise<PublicPhoto | null>((resolve, reject) => {
+        const controller = createBunnyTusUploadController({
+          file: item.file,
+          init,
+          onProgress(progress) {
+            dispatch({
+              type: "item-update",
+              id: item.id,
+              patch: { status: "uploading", progress, error: undefined },
+            });
+          },
+          onSuccess() {
+            tusUploadsRef.current.delete(item.id);
+            dispatch({
+              type: "item-update",
+              id: item.id,
+              patch: { status: "processing", progress: 100, error: undefined },
+            });
+            resolve(null);
+          },
+          onError(error) {
+            tusUploadsRef.current.delete(item.id);
+            const message = error.message || "Falha de rede durante o upload.";
+            dispatch({
+              type: "item-update",
+              id: item.id,
+              patch: { status: "error", progress: 0, error: message },
+            });
+            reject(new Error(message));
+          },
+        });
+
+        tusUploadsRef.current.set(item.id, controller);
+        dispatch({
+          type: "item-update",
+          id: item.id,
+          patch: { status: "uploading", progress: 1, error: undefined },
+        });
+
+        controller.start().catch((error: unknown) => {
+          tusUploadsRef.current.delete(item.id);
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Falha de rede durante o upload.";
+          dispatch({
+            type: "item-update",
+            id: item.id,
+            patch: { status: "error", progress: 0, error: message },
+          });
+          reject(new Error(message));
+        });
+      });
+    },
+    [eventId],
+  );
+
+  const uploadItem = useCallback(
+    (item: UploadItem, guestSessionId: string, tags: string[]) => {
+      if (item.mediaType === "video") {
+        return uploadVideoItem(item, guestSessionId, tags);
+      }
+
+      return uploadImageItem(item, guestSessionId, tags);
+    },
+    [uploadImageItem, uploadVideoItem],
+  );
+
   const start = useCallback(
     async (guestSessionId: string, tags: string[], onlyItemId?: string) => {
       const normalizedTags = normalizePhotoTags(tags);
@@ -306,7 +475,9 @@ export function usePhotoUploadQueue({
           try {
             const photo = await uploadItem(item, guestSessionId, normalizedTags);
             summary.successCount += 1;
-            summary.firstPhoto ??= photo;
+            if (photo) {
+              summary.firstPhoto ??= photo;
+            }
           } catch {
             const latest = itemsRef.current.find((entry) => entry.id === item.id);
             if (latest?.status === "cancelled") {
@@ -319,8 +490,9 @@ export function usePhotoUploadQueue({
       }
 
       await Promise.allSettled(
-        Array.from({ length: Math.min(getUploadConcurrency(), queue.length) }, () =>
-          worker(),
+        Array.from(
+          { length: Math.min(getUploadConcurrency(queue), queue.length) },
+          () => worker(),
         ),
       );
 

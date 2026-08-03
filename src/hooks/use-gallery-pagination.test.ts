@@ -13,8 +13,14 @@ import type { PaginatedPhotos, PublicPhoto } from "@/types";
 function photo(id: string, createdAt: string): PublicPhoto {
   return {
     id,
+    mediaType: "image",
     imageUrl: `https://cdn.example.com/${id}.jpg`,
     thumbnailUrl: `https://cdn.example.com/${id}.webp`,
+    videoEmbedUrl: null,
+    playbackUrl: null,
+    durationSeconds: null,
+    width: null,
+    height: null,
     guestName: "Maria",
     tags: [],
     likeCount: 0,

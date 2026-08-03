@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef, useState } from "react";
-import { Heart, Image as ImageIcon } from "lucide-react";
+import { Heart, Image as ImageIcon, Play } from "lucide-react";
 import type { PublicPhoto } from "@/types";
 import { normalizeGuestName } from "@/lib/validators";
 
@@ -60,11 +60,14 @@ export function PhotoFeedCard({
 }) {
   const lastTapAtRef = useRef(0);
   const ignoreNextClickRef = useRef(false);
+  const isVideo = photo.mediaType === "video";
+  const mediaLabel = isVideo ? "video" : "foto";
+  const primaryImageUrl = isVideo ? photo.thumbnailUrl : photo.imageUrl;
   const fallbackImageUrl =
-    photo.thumbnailUrl && photo.thumbnailUrl !== photo.imageUrl
+    !isVideo && photo.thumbnailUrl && photo.thumbnailUrl !== photo.imageUrl
       ? photo.thumbnailUrl
       : null;
-  const [displayImageUrl, setDisplayImageUrl] = useState(photo.imageUrl);
+  const [displayImageUrl, setDisplayImageUrl] = useState(primaryImageUrl);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const normalizedGuestName = normalizeGuestName(photo.guestName);
   const guestInitial =
@@ -72,9 +75,9 @@ export function PhotoFeedCard({
   const relativeTime = formatPhotoRelativeTime(photo.createdAt);
 
   useEffect(() => {
-    setDisplayImageUrl(photo.imageUrl);
+    setDisplayImageUrl(primaryImageUrl);
     setImageLoadFailed(false);
-  }, [photo.id, photo.imageUrl, photo.thumbnailUrl]);
+  }, [photo.id, primaryImageUrl]);
 
   function handleImageError() {
     if (fallbackImageUrl && displayImageUrl !== fallbackImageUrl) {
@@ -121,23 +124,30 @@ export function PhotoFeedCard({
         type="button"
         onClick={handleImageClick}
         onPointerUp={handleImagePointerUp}
-        aria-label={`Abrir foto enviada por ${photo.guestName}`}
+        aria-label={`Abrir ${mediaLabel} enviada por ${photo.guestName}`}
       >
-        {imageLoadFailed ? (
+        {imageLoadFailed || !displayImageUrl ? (
           <span className="photo-feed-image-placeholder">
             <ImageIcon aria-hidden="true" />
-            <span>Foto indisponivel</span>
+            <span>{isVideo ? "Video indisponivel" : "Foto indisponivel"}</span>
           </span>
         ) : (
-          <img
-            className="photo-feed-image"
-            src={displayImageUrl}
-            alt={`Foto enviada por ${photo.guestName}`}
-            loading={isPriority ? "eager" : "lazy"}
-            decoding="async"
-            fetchPriority={isPriority ? "high" : "auto"}
-            onError={handleImageError}
-          />
+          <>
+            <img
+              className="photo-feed-image"
+              src={displayImageUrl}
+              alt={`${isVideo ? "Video" : "Foto"} enviada por ${photo.guestName}`}
+              loading={isPriority ? "eager" : "lazy"}
+              decoding="async"
+              fetchPriority={isPriority ? "high" : "auto"}
+              onError={handleImageError}
+            />
+            {isVideo && (
+              <span className="video-feed-badge">
+                <Play aria-hidden="true" />
+              </span>
+            )}
+          </>
         )}
       </button>
 
@@ -161,8 +171,8 @@ export function PhotoFeedCard({
             type="button"
             onClick={() => onSelectPhoto(photo)}
           >
-            <ImageIcon aria-hidden="true" />
-            Abrir foto
+            {isVideo ? <Play aria-hidden="true" /> : <ImageIcon aria-hidden="true" />}
+            Abrir {mediaLabel}
           </button>
         </div>
 

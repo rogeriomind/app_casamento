@@ -13,8 +13,14 @@ import type { PublicEvent, PublicPhoto } from "@/types";
 function photo(overrides: Partial<PublicPhoto> = {}): PublicPhoto {
   return {
     id: "photo-1",
+    mediaType: "image",
     imageUrl: "https://cdn.example.com/photos/original.jpg",
     thumbnailUrl: "https://cdn.example.com/thumbnails/thumb.webp",
+    videoEmbedUrl: null,
+    playbackUrl: null,
+    durationSeconds: null,
+    width: null,
+    height: null,
     guestName: "Maria",
     tags: [],
     likeCount: 2,
@@ -23,6 +29,21 @@ function photo(overrides: Partial<PublicPhoto> = {}): PublicPhoto {
     createdAt: "2026-07-25T12:00:00.000Z",
     ...overrides,
   };
+}
+
+function videoPhoto(overrides: Partial<PublicPhoto> = {}): PublicPhoto {
+  return photo({
+    id: "video-1",
+    mediaType: "video",
+    imageUrl: null,
+    thumbnailUrl: "https://vz-example.b-cdn.net/video-guid/thumbnail.jpg",
+    videoEmbedUrl: "https://player.mediadelivery.net/embed/123456/video-guid",
+    playbackUrl: "https://player.mediadelivery.net/play/123456/video-guid",
+    durationSeconds: 42,
+    width: 1920,
+    height: 1080,
+    ...overrides,
+  });
 }
 
 const event: PublicEvent = {
@@ -62,6 +83,7 @@ function renderGalleryScreen({
       isUploading={false}
       deletingPhotoIds={new Set()}
       error={null}
+      notice={null}
       loadMoreError={loadMoreError}
       sentinelRef={vi.fn()}
       onAddPhoto={vi.fn()}
@@ -155,6 +177,45 @@ describe("wedding album image rendering", () => {
       "href",
       "https://cdn.example.com/photos/original.jpg",
     );
+  });
+
+  it("renders video thumbnails in the grid without loading a player", () => {
+    const { container } = render(
+      <PhotoGridButton
+        photo={videoPhoto()}
+        galleryScope="all"
+        isHighlighted={false}
+        isDeleting={false}
+        isPriority
+        onDeletePhoto={vi.fn()}
+        onSelectPhoto={vi.fn()}
+        onToggleLike={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByAltText("Video enviada por Maria")).toHaveAttribute(
+      "src",
+      "https://vz-example.b-cdn.net/video-guid/thumbnail.jpg",
+    );
+    expect(screen.getByText("0:42")).toBeVisible();
+    expect(container.querySelector("video")).not.toBeInTheDocument();
+    expect(container.querySelector("iframe")).not.toBeInTheDocument();
+  });
+
+  it("renders the Bunny player for videos only inside the modal", () => {
+    render(
+      <PhotoPreviewModal
+        photo={videoPhoto()}
+        onToggleLike={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTitle("Video enviado por Maria")).toHaveAttribute(
+      "src",
+      "https://player.mediadelivery.net/embed/123456/video-guid",
+    );
+    expect(screen.queryByRole("link", { name: /baixar foto/i })).not.toBeInTheDocument();
   });
 });
 

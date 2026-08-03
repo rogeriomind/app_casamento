@@ -1,10 +1,20 @@
 "use client";
 
 import { memo, useRef } from "react";
-import { Heart, Loader2, Trash2 } from "lucide-react";
+import { Heart, Loader2, Play, Trash2 } from "lucide-react";
 import type { PublicPhoto } from "@/types";
 
 export type PhotoGridScope = "all" | "mine";
+
+function formatMediaDuration(durationSeconds: number | null) {
+  if (!durationSeconds || durationSeconds < 1) {
+    return null;
+  }
+
+  const minutes = Math.floor(durationSeconds / 60);
+  const seconds = durationSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 
 export function PhotoGridCard({
   photo,
@@ -72,6 +82,9 @@ export function PhotoGridCard({
 
   const canDelete = galleryScope === "mine" && photo.canDelete;
   const gridImageUrl = photo.thumbnailUrl ?? photo.imageUrl;
+  const isVideo = photo.mediaType === "video";
+  const mediaLabel = isVideo ? "video" : "foto";
+  const durationLabel = isVideo ? formatMediaDuration(photo.durationSeconds) : null;
 
   return (
     <div
@@ -99,19 +112,31 @@ export function PhotoGridCard({
         }}
         aria-label={
           galleryScope === "all"
-            ? `Toque duas vezes para curtir. Segure por 2 segundos para abrir foto enviada por ${photo.guestName}`
-            : `Abrir foto enviada por ${photo.guestName}`
+            ? `Toque duas vezes para curtir. Segure por 2 segundos para abrir ${mediaLabel} enviada por ${photo.guestName}`
+            : `Abrir ${mediaLabel} enviada por ${photo.guestName}`
         }
       >
-        <img
-          src={gridImageUrl}
-          alt={`Foto enviada por ${photo.guestName}`}
-          width={720}
-          height={720}
-          loading={isPriority ? "eager" : "lazy"}
-          decoding="async"
-          fetchPriority={isPriority ? "high" : "auto"}
-        />
+        {gridImageUrl ? (
+          <img
+            src={gridImageUrl}
+            alt={`${isVideo ? "Video" : "Foto"} enviada por ${photo.guestName}`}
+            width={720}
+            height={720}
+            loading={isPriority ? "eager" : "lazy"}
+            decoding="async"
+            fetchPriority={isPriority ? "high" : "auto"}
+          />
+        ) : (
+          <span className="photo-card-placeholder">
+            {isVideo ? "Video indisponivel" : "Foto indisponivel"}
+          </span>
+        )}
+        {isVideo && (
+          <span className="video-grid-badge">
+            <Play aria-hidden="true" />
+            {durationLabel && <small>{durationLabel}</small>}
+          </span>
+        )}
         {galleryScope === "all" && (
           <span className="photo-like-badge">
             <Heart aria-hidden="true" />
@@ -126,8 +151,8 @@ export function PhotoGridCard({
           type="button"
           disabled={isDeleting}
           onClick={() => onDeletePhoto(photo)}
-          aria-label={`Excluir foto enviada por ${photo.guestName}`}
-          title="Excluir foto"
+          aria-label={`Excluir ${mediaLabel} enviada por ${photo.guestName}`}
+          title={`Excluir ${mediaLabel}`}
         >
           {isDeleting ? (
             <Loader2 aria-hidden="true" className="spin-icon small" />
