@@ -4,6 +4,7 @@ import {
   guestNameSchema,
   normalizeGuestName,
   validateImageFileInput,
+  validateVideoFileInput,
 } from "@/lib/validators";
 
 describe("guest name validation", () => {
@@ -59,6 +60,50 @@ describe("image file validation", () => {
         size: 26 * 1024 * 1024,
       }),
     ).toMatchObject({ ok: false, code: "FILE_TOO_LARGE" });
+  });
+});
+
+describe("video file validation", () => {
+  it("accepts supported videos up to 100 MB and 60 seconds", () => {
+    expect(
+      validateVideoFileInput({
+        name: "cerimonia.mp4",
+        type: "video/mp4",
+        size: 100 * 1024 * 1024,
+        durationSeconds: 60,
+      }),
+    ).toEqual({ ok: true });
+  });
+
+  it("rejects unsupported video types", () => {
+    expect(
+      validateVideoFileInput({
+        name: "cerimonia.avi",
+        type: "video/x-msvideo",
+        size: 1024,
+      }),
+    ).toMatchObject({ ok: false, code: "INVALID_VIDEO_TYPE" });
+  });
+
+  it("rejects videos larger than 100 MB", () => {
+    expect(
+      validateVideoFileInput({
+        name: "cerimonia.mp4",
+        type: "video/mp4",
+        size: 101 * 1024 * 1024,
+      }),
+    ).toMatchObject({ ok: false, code: "VIDEO_TOO_LARGE" });
+  });
+
+  it("rejects videos longer than 60 seconds when duration is available", () => {
+    expect(
+      validateVideoFileInput({
+        name: "cerimonia.mp4",
+        type: "video/mp4",
+        size: 1024,
+        durationSeconds: 61,
+      }),
+    ).toMatchObject({ ok: false, code: "VIDEO_TOO_LONG" });
   });
 });
 

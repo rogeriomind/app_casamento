@@ -38,11 +38,19 @@ function photo(overrides: Partial<Parameters<typeof JSON.stringify>[0]> = {}) {
     eventId: "event-1",
     guestSessionId: "session-1",
     guestName: "Maria",
+    mediaType: "image",
     imageUrl: "https://old-cdn.example.com/clients/hash/photos/photo.jpg",
     thumbnailUrl: null,
     imageObjectPath: null,
     thumbnailObjectPath: null,
     status: "published",
+    streamVideoId: null,
+    streamLibraryId: null,
+    videoEmbedUrl: null,
+    playbackUrl: null,
+    durationSeconds: null,
+    width: null,
+    height: null,
     originalFileName: "foto.jpg",
     mimeType: "image/jpeg",
     sizeInBytes: 123,
@@ -155,6 +163,7 @@ describe("GET /api/events/[eventKey]/photos", () => {
     );
     expect(prismaMock.photo.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
+        mediaType: "image",
         imageUrl: "https://new-cdn.example.com/clients/hash/photos/photo.png",
         thumbnailUrl:
           "https://new-cdn.example.com/clients/hash/thumbnails/photo-thumb.webp",

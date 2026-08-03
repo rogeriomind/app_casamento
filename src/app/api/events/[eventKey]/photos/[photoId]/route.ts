@@ -4,6 +4,7 @@ import {
   deleteBunnyObject,
   getBunnyObjectPathFromPublicUrl,
 } from "@/lib/bunny-storage";
+import { deleteBunnyStreamVideo } from "@/lib/bunny-stream";
 import { prisma } from "@/lib/prisma";
 import { normalizeGuestName } from "@/lib/validators";
 
@@ -64,11 +65,13 @@ export async function DELETE(request: Request, context: RouteContext) {
     },
     select: {
       id: true,
+      mediaType: true,
       guestName: true,
       imageUrl: true,
       thumbnailUrl: true,
       imageObjectPath: true,
       thumbnailObjectPath: true,
+      streamVideoId: true,
     },
   });
 
@@ -77,19 +80,36 @@ export async function DELETE(request: Request, context: RouteContext) {
     normalizeNameForOwnership(photo.guestName) !==
       normalizeNameForOwnership(guestSession.guestName)
   ) {
-    return jsonError("Foto nao encontrada.", 404, "PHOTO_NOT_FOUND");
+    return jsonError("Midia nao encontrada.", 404, "PHOTO_NOT_FOUND");
   }
 
   await prisma.photo.delete({
     where: { id: photo.id },
   });
 
+  if (photo.mediaType === "video") {
+    if (photo.streamVideoId) {
+      try {
+        await deleteBunnyStreamVideo(photo.streamVideoId);
+      } catch (error) {
+        console.warn("video_delete_bunny_cleanup_failed", {
+          eventId: event.id,
+          photoId: photo.id,
+          streamVideoId: photo.streamVideoId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return NextResponse.json({ ok: true });
+  }
+
   const bunnyObjectPaths = Array.from(
     new Set(
       [
         photo.imageObjectPath,
         photo.thumbnailObjectPath,
-        getBunnyObjectPathFromPublicUrl(photo.imageUrl),
+        photo.imageUrl ? getBunnyObjectPathFromPublicUrl(photo.imageUrl) : null,
         photo.thumbnailUrl ? getBunnyObjectPathFromPublicUrl(photo.thumbnailUrl) : null,
       ]
         .filter((path): path is string => Boolean(path)),

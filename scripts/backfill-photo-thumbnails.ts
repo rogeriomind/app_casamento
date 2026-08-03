@@ -28,7 +28,7 @@ type BackfillStats = {
 type BackfillPhoto = {
   id: string;
   eventId: string;
-  imageUrl: string;
+  imageUrl: string | null;
   imageObjectPath: string | null;
   thumbnailUrl: string | null;
   thumbnailObjectPath: string | null;
@@ -121,10 +121,15 @@ function getPreviousThumbnailObjectPaths(photo: BackfillPhoto) {
 
 async function downloadOriginalPhotoBuffer(photo: BackfillPhoto) {
   const objectPath =
-    photo.imageObjectPath ?? getBunnyObjectPathFromPublicUrl(photo.imageUrl);
+    photo.imageObjectPath ??
+    (photo.imageUrl ? getBunnyObjectPathFromPublicUrl(photo.imageUrl) : null);
 
   if (objectPath) {
     return downloadBunnyObject(objectPath);
+  }
+
+  if (!photo.imageUrl) {
+    throw new Error(`Foto ${photo.id} nao possui URL original para backfill.`);
   }
 
   const response = await fetch(photo.imageUrl);
@@ -194,7 +199,7 @@ async function backfillPhoto(
       name:
         photo.originalFileName ??
         photo.imageObjectPath?.split("/").pop() ??
-        photo.imageUrl.split("/").pop() ??
+        photo.imageUrl?.split("/").pop() ??
         photo.id,
       type: photo.mimeType,
     },
@@ -254,6 +259,7 @@ export async function runBackfill(options: CliOptions) {
       where: {
         eventId: options.eventId,
         status: "published",
+        mediaType: "image",
         id: lastId ? { gt: lastId } : undefined,
         OR: [
           { thumbnailUrl: null },

@@ -31,8 +31,14 @@ export function serializePhoto(
   photo: Pick<
     Photo,
     | "id"
+    | "mediaType"
     | "imageUrl"
     | "thumbnailUrl"
+    | "videoEmbedUrl"
+    | "playbackUrl"
+    | "durationSeconds"
+    | "width"
+    | "height"
     | "guestName"
     | "guestSessionId"
     | "tags"
@@ -45,18 +51,28 @@ export function serializePhoto(
   options: { preferObjectPathUrls?: boolean } = {},
 ): PublicPhoto {
   const imageUrl =
-    options.preferObjectPathUrls && photo.imageObjectPath
+    photo.mediaType === "image" &&
+    options.preferObjectPathUrls &&
+    photo.imageObjectPath
       ? getBunnyPublicUrl(photo.imageObjectPath)
       : photo.imageUrl;
   const thumbnailUrl =
-    options.preferObjectPathUrls && photo.thumbnailObjectPath
+    photo.mediaType === "image" &&
+    options.preferObjectPathUrls &&
+    photo.thumbnailObjectPath
       ? getBunnyPublicUrl(photo.thumbnailObjectPath)
       : photo.thumbnailUrl;
 
   return {
     id: photo.id,
+    mediaType: photo.mediaType,
     imageUrl,
     thumbnailUrl,
+    videoEmbedUrl: photo.videoEmbedUrl,
+    playbackUrl: photo.playbackUrl,
+    durationSeconds: photo.durationSeconds,
+    width: photo.width,
+    height: photo.height,
     guestName: photo.guestName,
     tags: parsePhotoTags(photo.tags),
     likeCount: photo.likeCount,

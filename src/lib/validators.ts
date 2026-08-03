@@ -5,6 +5,8 @@ import {
 } from "@/lib/client-normalization";
 
 export const MAX_IMAGE_SIZE_IN_BYTES = 25 * 1024 * 1024;
+export const MAX_VIDEO_SIZE_IN_BYTES = 100 * 1024 * 1024;
+export const MAX_VIDEO_DURATION_SECONDS = 60;
 
 export const ACCEPTED_IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
@@ -23,6 +25,14 @@ const ACCEPTED_IMAGE_EXTENSIONS = new Set([
   "heic",
   "heif",
 ]);
+
+export const ACCEPTED_VIDEO_MIME_TYPES = new Set([
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+]);
+
+const ACCEPTED_VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm"]);
 
 const nameCharacters = /^[\p{L}\p{M}\s'.-]+$/u;
 
@@ -82,6 +92,10 @@ export type ImageFileInput = {
   type?: string;
 };
 
+export type VideoFileInput = ImageFileInput & {
+  durationSeconds?: number | null;
+};
+
 export function validateImageFileInput(file: ImageFileInput) {
   const mimeType = file.type?.toLowerCase() ?? "";
   const extension = file.name?.split(".").pop()?.toLowerCase() ?? "";
@@ -110,6 +124,52 @@ export function validateImageFileInput(file: ImageFileInput) {
       ok: false,
       code: "FILE_TOO_LARGE",
       message: "A foto precisa ter ate 25 MB.",
+    } as const;
+  }
+
+  return { ok: true } as const;
+}
+
+export function validateVideoFileInput(file: VideoFileInput) {
+  const mimeType = file.type?.toLowerCase() ?? "";
+  const extension = file.name?.split(".").pop()?.toLowerCase() ?? "";
+
+  if (
+    !ACCEPTED_VIDEO_MIME_TYPES.has(mimeType) &&
+    !ACCEPTED_VIDEO_EXTENSIONS.has(extension)
+  ) {
+    return {
+      ok: false,
+      code: "INVALID_VIDEO_TYPE",
+      message: "Envie um video MP4, MOV ou WebM.",
+    } as const;
+  }
+
+  if (file.size <= 0) {
+    return {
+      ok: false,
+      code: "EMPTY_VIDEO",
+      message: "O video selecionado esta vazio.",
+    } as const;
+  }
+
+  if (file.size > MAX_VIDEO_SIZE_IN_BYTES) {
+    return {
+      ok: false,
+      code: "VIDEO_TOO_LARGE",
+      message: "O video precisa ter ate 100 MB.",
+    } as const;
+  }
+
+  if (
+    typeof file.durationSeconds === "number" &&
+    Number.isFinite(file.durationSeconds) &&
+    file.durationSeconds > MAX_VIDEO_DURATION_SECONDS
+  ) {
+    return {
+      ok: false,
+      code: "VIDEO_TOO_LONG",
+      message: "O video precisa ter ate 60 segundos.",
     } as const;
   }
 

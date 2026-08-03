@@ -152,6 +152,7 @@ export async function POST(request: Request, context: RouteContext) {
         eventId: event.id,
         guestSessionId: guestSession.id,
         guestName: guestSession.guestName,
+        mediaType: "image",
         imageUrl: storedPhoto.imageUrl,
         thumbnailUrl: storedPhoto.thumbnailUrl,
         imageObjectPath: storedPhoto.imageObjectPath,

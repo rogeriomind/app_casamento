@@ -15,8 +15,14 @@ export type PublicGuestSession = {
 
 export type PublicPhoto = {
   id: string;
-  imageUrl: string;
+  mediaType: "image" | "video";
+  imageUrl: string | null;
   thumbnailUrl: string | null;
+  videoEmbedUrl: string | null;
+  playbackUrl: string | null;
+  durationSeconds: number | null;
+  width: number | null;
+  height: number | null;
   guestName: string;
   tags: string[];
   likeCount: number;

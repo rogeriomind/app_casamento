@@ -46,11 +46,19 @@ model Photo {
   eventId             String
   guestSessionId      String
   guestName           String
-  imageUrl            String
+  mediaType           MediaType    @default(image)
+  imageUrl            String?
   thumbnailUrl        String?
   imageObjectPath     String?
   thumbnailObjectPath String?
   status              PhotoStatus  @default(published)
+  streamVideoId       String?
+  streamLibraryId     String?
+  videoEmbedUrl       String?
+  playbackUrl         String?
+  durationSeconds     Int?
+  width               Int?
+  height              Int?
   originalFileName    String?
   mimeType            String
   sizeInBytes         Int
@@ -64,7 +72,10 @@ model Photo {
 
   @@index([eventId, status, createdAt])
   @@index([eventId, status, createdAt, id])
+  @@index([eventId, mediaType, status, createdAt, id])
   @@index([guestSessionId])
+  @@index([streamLibraryId, streamVideoId])
+  @@unique([streamLibraryId, streamVideoId])
 }
 
 model PhotoLike {
@@ -83,4 +94,11 @@ enum PhotoStatus {
   published
   processing
   rejected
+  uploading
+  failed
+}
+
+enum MediaType {
+  image
+  video
 }
