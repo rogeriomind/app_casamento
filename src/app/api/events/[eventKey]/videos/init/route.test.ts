@@ -121,7 +121,7 @@ describe("POST /api/events/[eventKey]/videos/init", () => {
 
     expect(response.status).toBe(201);
     expect(bunnyStreamMock.createBunnyStreamVideo).toHaveBeenCalledWith(
-      { title: "event-1 - cerimonia.mp4", thumbnailTime: 1000 },
+      { title: "event-1 - cerimonia.mp4" },
       expect.objectContaining({
         config: expect.objectContaining({ libraryId: "123456" }),
       }),
@@ -153,8 +153,50 @@ describe("POST /api/events/[eventKey]/videos/init", () => {
           LibraryId: "123456",
           VideoId: "video-guid",
         },
+        metadata: {
+          filetype: "video/mp4",
+          title: "event-1 - cerimonia.mp4",
+          thumbnailTime: "1000",
+        },
       },
     });
+    expect(JSON.stringify(data)).not.toContain("stream-secret");
+  });
+
+  it("returns a safe error when Bunny Stream is not configured", async () => {
+    prismaMock.event.findUnique.mockResolvedValueOnce({
+      id: "event-1",
+      isActive: true,
+    });
+    prismaMock.guestSession.findFirst.mockResolvedValueOnce({
+      id: "session-1",
+      guestName: "Maria",
+    });
+    bunnyStreamMock.getBunnyStreamConfig.mockImplementationOnce(() => {
+      throw new bunnyStreamMock.BunnyStreamError(
+        "Bunny Stream nao esta configurado.",
+        "BUNNY_STREAM_NOT_CONFIGURED",
+      );
+    });
+
+    const response = await POST(
+      request({
+        guestSessionId: "session-1",
+        fileName: "cerimonia.mp4",
+        mimeType: "video/mp4",
+        sizeInBytes: 1024,
+        durationSeconds: 42,
+      }),
+      context,
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data).toMatchObject({
+      code: "BUNNY_STREAM_NOT_CONFIGURED",
+      error: "Envio de video nao configurado.",
+    });
+    expect(bunnyStreamMock.createBunnyStreamVideo).not.toHaveBeenCalled();
     expect(JSON.stringify(data)).not.toContain("stream-secret");
   });
 

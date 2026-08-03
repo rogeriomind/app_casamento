@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   BunnyStreamError,
+  type BunnyStreamConfig,
   createBunnyStreamVideo,
   createBunnyTusSignature,
   deleteBunnyStreamVideo,
@@ -104,16 +105,14 @@ export async function POST(request: Request, context: RouteContext) {
         payload.tags.filter((tag): tag is string => typeof tag === "string"),
       )
     : parsePhotoTagsInput(typeof payload.tags === "string" ? payload.tags : null);
-  const config = getBunnyStreamConfig();
   const title = getSafeVideoTitle(fileName, event.id);
+  let config: BunnyStreamConfig | null = null;
   let streamVideoId: string | null = null;
 
   try {
+    config = getBunnyStreamConfig();
     const streamVideo = await createBunnyStreamVideo(
-      {
-        title,
-        thumbnailTime: 1000,
-      },
+      { title },
       { config },
     );
     streamVideoId = streamVideo.guid;
@@ -176,13 +175,14 @@ export async function POST(request: Request, context: RouteContext) {
           metadata: {
             filetype: mimeType,
             title,
+            thumbnailTime: "1000",
           },
         },
       },
       { status: 201 },
     );
   } catch (error) {
-    if (streamVideoId) {
+    if (streamVideoId && config) {
       await deleteBunnyStreamVideo(streamVideoId, { config }).catch(() => undefined);
     }
 
@@ -193,6 +193,14 @@ export async function POST(request: Request, context: RouteContext) {
         code: error.code,
         status: error.status,
       });
+      if (error.code === "BUNNY_STREAM_NOT_CONFIGURED") {
+        return jsonError(
+          "Envio de video nao configurado.",
+          500,
+          "BUNNY_STREAM_NOT_CONFIGURED",
+        );
+      }
+
       return jsonError(
         "Nao foi possivel iniciar o envio do video agora.",
         502,

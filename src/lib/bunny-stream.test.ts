@@ -85,7 +85,7 @@ describe("bunny stream helper", () => {
     );
 
     const video = await createBunnyStreamVideo(
-      { title: "video.mov", thumbnailTime: 1000 },
+      { title: "video.mov" },
       { config, fetchFn: fetchMock as unknown as typeof fetch },
     );
 
@@ -94,6 +94,7 @@ describe("bunny stream helper", () => {
       "https://video.bunnycdn.com/library/123456/videos",
       expect.objectContaining({
         method: "POST",
+        body: JSON.stringify({ title: "video.mov" }),
         headers: expect.objectContaining({
           AccessKey: "stream-secret",
           "Content-Type": "application/json",

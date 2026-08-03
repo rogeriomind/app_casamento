@@ -313,7 +313,6 @@ export async function createBunnyStreamVideo(
   input: {
     title: string;
     collectionId?: string | null;
-    thumbnailTime?: number | null;
   },
   options: {
     config?: BunnyStreamConfig;
@@ -325,9 +324,6 @@ export async function createBunnyStreamVideo(
   const body = {
     title: input.title,
     ...(input.collectionId ? { collectionId: input.collectionId } : {}),
-    ...(typeof input.thumbnailTime === "number"
-      ? { thumbnailTime: input.thumbnailTime }
-      : {}),
   };
 
   const json = await requestBunnyStreamJson(

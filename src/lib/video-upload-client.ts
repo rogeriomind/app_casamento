@@ -18,6 +18,7 @@ export type InitBunnyVideoUploadResponse = {
     metadata: {
       filetype: string;
       title: string;
+      thumbnailTime?: string;
     };
   };
 };
@@ -27,6 +28,19 @@ export type BunnyTusUploadController = {
   cancel: () => Promise<void>;
   cleanup: () => void;
 };
+
+export function createBunnyTusFingerprint(file: File, streamVideoId: string) {
+  return [
+    "bunny-stream",
+    streamVideoId,
+    file.name || "video",
+    file.type || "application/octet-stream",
+    String(file.size),
+    String(file.lastModified || 0),
+  ]
+    .map(encodeURIComponent)
+    .join(":");
+}
 
 async function readApiError(response: Response) {
   const data = (await response.json().catch(() => null)) as ApiError | null;
@@ -118,6 +132,8 @@ export function createBunnyTusUploadController({
     retryDelays: [0, 1000, 3000, 5000],
     storeFingerprintForResuming: true,
     removeFingerprintOnSuccess: true,
+    fingerprint: (uploadFile) =>
+      Promise.resolve(createBunnyTusFingerprint(uploadFile, init.streamVideoId)),
     onProgress(bytesSent, bytesTotal) {
       if (bytesTotal <= 0) {
         return;
