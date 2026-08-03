@@ -314,7 +314,8 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
     setIsSheetOpen(false);
 
     try {
-      const summary = await uploadQueue.start(session.guestSessionId, tags);
+      const activeSession = await submitGuestName(session.guestName);
+      const summary = await uploadQueue.start(activeSession.guestSessionId, tags);
       if (summary.successCount === 0) {
         setUploadError(
           summary.errorCount > 0
@@ -348,6 +349,26 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
         );
       }
       setStep("gallery");
+    } catch (error) {
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "Nao foi possivel publicar as fotos agora.",
+      );
+    }
+  }
+
+  async function retryPendingUpload(itemId: string, tags: string[]) {
+    if (!session) {
+      setStep("name");
+      return;
+    }
+
+    setUploadError(null);
+
+    try {
+      const activeSession = await submitGuestName(session.guestName);
+      await uploadQueue.start(activeSession.guestSessionId, tags, itemId);
     } catch (error) {
       setUploadError(
         error instanceof Error
@@ -585,11 +606,7 @@ export function WeddingAlbumApp({ event, initialGallery }: WeddingAlbumAppProps)
           onCancelUpload={uploadQueue.cancelItem}
           onCancel={handleCancelTagging}
           onPublish={(tags) => void uploadPendingPhotos(tags)}
-          onRetry={(itemId, tags) => {
-            if (session) {
-              void uploadQueue.start(session.guestSessionId, tags, itemId);
-            }
-          }}
+          onRetry={(itemId, tags) => void retryPendingUpload(itemId, tags)}
         />
       )}
 

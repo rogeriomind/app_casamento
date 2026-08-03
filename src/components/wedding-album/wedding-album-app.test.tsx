@@ -1,13 +1,38 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PhotoFeedCard } from "@/components/gallery/photo-feed-card";
+
+const videoUploadClientMock = vi.hoisted(() => ({
+  createBunnyTusUploadController: vi.fn(),
+  readVideoDurationSeconds: vi.fn(),
+}));
+
+vi.mock("@/lib/video-upload-client", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/video-upload-client")>(
+      "@/lib/video-upload-client",
+    );
+
+  return {
+    ...actual,
+    createBunnyTusUploadController:
+      videoUploadClientMock.createBunnyTusUploadController,
+    readVideoDurationSeconds: videoUploadClientMock.readVideoDurationSeconds,
+  };
+});
+
 import {
   GalleryScreen,
   PhotoGridButton,
   PhotoPreviewModal,
+  WeddingAlbumApp,
   WelcomeScreen,
 } from "@/components/wedding-album/wedding-album-app";
 import { getGalleryViewStorageKey } from "@/hooks/use-gallery-view-mode";
+import {
+  getDeviceStorageKey,
+  saveGuestSession,
+} from "@/lib/session-storage";
 import type { PublicEvent, PublicPhoto } from "@/types";
 
 function photo(overrides: Partial<PublicPhoto> = {}): PublicPhoto {
@@ -99,6 +124,25 @@ function renderGalleryScreen({
 
 beforeEach(() => {
   window.localStorage.clear();
+  videoUploadClientMock.readVideoDurationSeconds.mockReset();
+  videoUploadClientMock.readVideoDurationSeconds.mockResolvedValue(4);
+  videoUploadClientMock.createBunnyTusUploadController.mockReset();
+  videoUploadClientMock.createBunnyTusUploadController.mockImplementation(
+    ({
+      onProgress,
+      onSuccess,
+    }: {
+      onProgress: (progress: number) => void;
+      onSuccess: () => void;
+    }) => ({
+      start: async () => {
+        onProgress(94);
+        onSuccess();
+      },
+      cancel: async () => undefined,
+      cleanup: vi.fn(),
+    }),
+  );
 });
 
 afterEach(() => {
@@ -216,6 +260,142 @@ describe("wedding album image rendering", () => {
       "https://player.mediadelivery.net/embed/123456/video-guid",
     );
     expect(screen.queryByRole("link", { name: /baixar foto/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("wedding album upload flow", () => {
+  it("refreshes a stored guest session before starting a video upload", async () => {
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:video-preview"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    window.localStorage.setItem(getDeviceStorageKey(), "device-1");
+    saveGuestSession(event.id, {
+      guestSessionId: "stale-session",
+      guestName: "Maria",
+    });
+
+    const fetchMock = vi.fn(
+      async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        void init;
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof Request
+              ? input.url
+              : input.toString();
+
+        if (url.endsWith("/presence")) {
+          return new Response("{}", { status: 200 });
+        }
+
+        if (url.includes("/photos?")) {
+          return Response.json({
+            items: [],
+            page: 1,
+            limit: 16,
+            hasNextPage: false,
+            nextCursor: null,
+          });
+        }
+
+        if (url.endsWith("/guest-sessions")) {
+          return Response.json(
+            {
+              guestSessionId: "fresh-session",
+              guestName: "Maria",
+            },
+            { status: 201 },
+          );
+        }
+
+        if (url.endsWith("/videos/init")) {
+          return Response.json(
+            {
+              photoId: "photo-video-1",
+              status: "uploading",
+              streamVideoId: "video-guid",
+              tus: {
+                endpoint: "https://video.bunnycdn.com/tusupload",
+                headers: {
+                  AuthorizationSignature: "signed",
+                  AuthorizationExpire: "1800000000",
+                  LibraryId: "123456",
+                  VideoId: "video-guid",
+                },
+                metadata: {
+                  filetype: "video/mp4",
+                  title: "event-1 - cerimonia.mp4",
+                },
+              },
+            },
+            { status: 201 },
+          );
+        }
+
+        return new Response("{}", { status: 200 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <WeddingAlbumApp
+        event={event}
+        initialGallery={{
+          items: [],
+          page: 1,
+          limit: 16,
+          hasNextPage: false,
+          nextCursor: null,
+        }}
+      />,
+    );
+
+    await screen.findByRole("button", { name: "Adicionar" });
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
+    fireEvent.change(screen.getByLabelText("Gravar video"), {
+      target: {
+        files: [
+          new File(["video"], "cerimonia.mp4", {
+            type: "video/mp4",
+          }),
+        ],
+      },
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Publicar video" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).endsWith("/videos/init"),
+        ),
+      ).toBe(true);
+    });
+
+    const sessionCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith("/guest-sessions"),
+    );
+    const initCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith("/videos/init"),
+    );
+    const sessionRequest = sessionCall?.[1] as RequestInit;
+    const initRequest = initCall?.[1] as RequestInit;
+
+    expect(sessionRequest.headers).toMatchObject({
+      "x-device-id": "device-1",
+    });
+    expect(JSON.parse(String(sessionRequest.body))).toEqual({
+      guestName: "Maria",
+    });
+    expect(JSON.parse(String(initRequest.body))).toMatchObject({
+      guestSessionId: "fresh-session",
+    });
+    expect(JSON.stringify(initRequest.body)).not.toContain("stale-session");
   });
 });
 
