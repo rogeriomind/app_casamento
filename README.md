@@ -15,6 +15,12 @@ CLIENT_HASH_SECRET="troque-este-segredo-longo"
 BUNNY_STORAGE_ENDPOINT="<NOVO_ENDPOINT_BUNNY>"
 BUNNY_STORAGE_PASSWORD="<NOVA_SENHA_STORAGE_ZONE>"
 BUNNY_PUBLIC_BASE_URL="<URL_PUBLICA_DA_PULL_ZONE>"
+
+BUNNY_STREAM_LIBRARY_ID="<ID_DA_STREAM_LIBRARY>"
+BUNNY_STREAM_API_KEY="<API_KEY_DA_STREAM_LIBRARY>"
+BUNNY_STREAM_PULL_ZONE_HOSTNAME="<HOSTNAME_DA_PULL_ZONE_STREAM>"
+BUNNY_STREAM_WEBHOOK_SECRET="<READ_ONLY_API_KEY_DO_WEBHOOK_STREAM>"
+BUNNY_STREAM_REQUEST_TIMEOUT_MS="10000"
 ```
 
 ```powershell
@@ -103,6 +109,35 @@ npm.cmd run bunny:migrate -- --dry-run --limit 10
 
 O migrador nao apaga objetos antigos automaticamente.
 
+## Bunny Stream
+
+Videos usam Bunny Stream com upload TUS direto do navegador. A API Next.js cria o video, grava o registro como `uploading` e devolve apenas credenciais temporarias de TUS; o arquivo nunca passa como multipart completo pelo app.
+
+Configure o webhook da Stream Library para:
+
+```text
+https://seu-dominio.com/api/webhooks/bunny-stream
+```
+
+Use `BUNNY_STREAM_WEBHOOK_SECRET` com a Read-Only API Key informada pela Bunny para validar `x-bunnystream-signature`. O webhook publica o video apenas quando o Bunny conclui o processamento, atualiza thumbnail/duracao/dimensoes e rejeita videos acima de 60 segundos, excluindo-os do Bunny Stream.
+
+Limites da primeira versao:
+
+- 1 video por selecao, ate 100 MB e 60 segundos.
+- Ate 10 fotos por selecao continuam permitidas.
+- Nao misturar fotos e video na mesma selecao.
+- A grade sempre usa thumbnail; o player Bunny so carrega no modal.
+
+Teste manual no celular:
+
+1. Acesse o album por `/e/{clientHash}` em HTTPS.
+2. Toque em `Adicionar` > `Tirar foto` e confirme que a foto aparece.
+3. Toque em `Adicionar` > `Gravar video`, grave menos de 60s, adicione tags e publique.
+4. Aguarde o processamento Bunny; atualize a galeria e confirme thumbnail, play e duracao.
+5. Abra o video na galeria e confirme o player Bunny no modal.
+6. Exclua uma foto e um video enviados pelo mesmo nome de convidado.
+7. Tente selecionar fotos e video juntos; o app deve bloquear a selecao.
+
 ## Scripts
 
 - `npm.cmd run dev`: inicia o app local.
@@ -128,4 +163,5 @@ Em producao, a aplicacao fica isolada em `/opt/apps/app_casamento` com `COMPOSE_
 - Heartbeat para usuarios online nos ultimos 2 minutos, com intervalo de cerca de 60 segundos e reducao de escritas redundantes.
 - Metricas administrativas de fotos, usuarios online e usuarios que entraram.
 - Upload da galeria do celular e captura por camera.
+- Upload direto de videos para Bunny Stream com TUS.
 - Persistencia em Postgres via Prisma.

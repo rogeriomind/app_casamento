@@ -22,6 +22,10 @@ jobs:
       BUNNY_STORAGE_ENDPOINT: "https://storage.example.com/app-casamento"
       BUNNY_STORAGE_PASSWORD: "ci-storage-password"
       BUNNY_PUBLIC_BASE_URL: "https://cdn.example.com"
+      BUNNY_STREAM_LIBRARY_ID: "123456"
+      BUNNY_STREAM_API_KEY: "ci-stream-api-key"
+      BUNNY_STREAM_PULL_ZONE_HOSTNAME: "vz-example.b-cdn.net"
+      BUNNY_STREAM_WEBHOOK_SECRET: "ci-stream-webhook-secret"
 
     steps:
       - name: Checkout repository
