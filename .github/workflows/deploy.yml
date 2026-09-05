@@ -69,11 +69,57 @@ jobs:
       VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
       APP_PATH: ${{ secrets.APP_PATH }}
       RELEASE_TARBALL: /tmp/app_casamento_release.tar.gz
+      BUNNY_STREAM_ENV_FILE: /tmp/app_casamento_bunny_stream_${{ github.run_id }}_${{ github.run_attempt }}.env
       COMMIT_SHA: ${{ github.sha }}
+      BUNNY_STREAM_LIBRARY_ID: ${{ secrets.BUNNY_STREAM_LIBRARY_ID }}
+      BUNNY_STREAM_API_KEY: ${{ secrets.BUNNY_STREAM_API_KEY }}
+      BUNNY_STREAM_PULL_ZONE_HOSTNAME: ${{ secrets.BUNNY_STREAM_PULL_ZONE_HOSTNAME }}
+      BUNNY_STREAM_WEBHOOK_SECRET: ${{ secrets.BUNNY_STREAM_WEBHOOK_SECRET }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Prepare Bunny Stream configuration
+        run: |
+          set -euo pipefail
+
+          required=(
+            BUNNY_STREAM_LIBRARY_ID
+            BUNNY_STREAM_API_KEY
+            BUNNY_STREAM_PULL_ZONE_HOSTNAME
+            BUNNY_STREAM_WEBHOOK_SECRET
+          )
+
+          for name in "${required[@]}"; do
+            value="${!name:-}"
+            if [ -z "$value" ]; then
+              echo "Missing $name secret" >&2
+              exit 1
+            fi
+            if [[ "$value" == *$'\n'* || "$value" == *$'\r'* ]]; then
+              echo "$name contains an invalid line break" >&2
+              exit 1
+            fi
+          done
+
+          if [[ ! "$BUNNY_STREAM_LIBRARY_ID" =~ ^[0-9]+$ ]]; then
+            echo "BUNNY_STREAM_LIBRARY_ID must be numeric" >&2
+            exit 1
+          fi
+
+          if [[ ! "$BUNNY_STREAM_PULL_ZONE_HOSTNAME" =~ ^[A-Za-z0-9.-]+$ ]]; then
+            echo "BUNNY_STREAM_PULL_ZONE_HOSTNAME must be a hostname without protocol or path" >&2
+            exit 1
+          fi
+
+          umask 077
+          {
+            printf 'BUNNY_STREAM_LIBRARY_ID=%s\n' "$BUNNY_STREAM_LIBRARY_ID"
+            printf 'BUNNY_STREAM_API_KEY=%s\n' "$BUNNY_STREAM_API_KEY"
+            printf 'BUNNY_STREAM_PULL_ZONE_HOSTNAME=%s\n' "$BUNNY_STREAM_PULL_ZONE_HOSTNAME"
+            printf 'BUNNY_STREAM_WEBHOOK_SECRET=%s\n' "$BUNNY_STREAM_WEBHOOK_SECRET"
+          } > "$RUNNER_TEMP/bunny-stream.env"
 
       - name: Configure SSH
         run: |
@@ -110,12 +156,15 @@ jobs:
           set -euo pipefail
           scp -i ~/.ssh/vps_key -P "$VPS_PORT" "$RUNNER_TEMP/app_casamento_release.tar.gz" \
             "$VPS_USER@$VPS_HOST:$RELEASE_TARBALL"
+          scp -i ~/.ssh/vps_key -P "$VPS_PORT" "$RUNNER_TEMP/bunny-stream.env" \
+            "$VPS_USER@$VPS_HOST:$BUNNY_STREAM_ENV_FILE"
+          rm -f "$RUNNER_TEMP/bunny-stream.env"
 
       - name: Deploy on VPS
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/vps_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
-            "APP_PATH='$APP_PATH' RELEASE_TARBALL='$RELEASE_TARBALL' COMMIT_SHA='$COMMIT_SHA' bash -s" < deploy/deploy.sh
+            "APP_PATH='$APP_PATH' RELEASE_TARBALL='$RELEASE_TARBALL' BUNNY_STREAM_ENV_FILE='$BUNNY_STREAM_ENV_FILE' COMMIT_SHA='$COMMIT_SHA' bash -s" < deploy/deploy.sh
 
       - name: Remote healthcheck
         run: |
@@ -133,3 +182,12 @@ jobs:
             echo "- App path: \`${APP_PATH}\`"
             echo "- Environment: production"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup temporary Bunny Stream configuration
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/bunny-stream.env"
+          if [ -f ~/.ssh/vps_key ]; then
+            ssh -i ~/.ssh/vps_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+              "rm -f -- '$BUNNY_STREAM_ENV_FILE'" || true
+          fi

@@ -10,6 +10,7 @@ REPO_URL="${REPO_URL:-}"
 BACKUP_ROOT="${BACKUP_ROOT:-/opt/backups/app_casamento}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
 RUN_REMOTE_NODE_PREFLIGHT="${RUN_REMOTE_NODE_PREFLIGHT:-1}"
+BUNNY_STREAM_ENV_FILE="${BUNNY_STREAM_ENV_FILE:-}"
 TEMP_ENV=""
 RELEASE_DIR=""
 
@@ -19,6 +20,9 @@ cleanup() {
   fi
   if [ -n "${RELEASE_DIR:-}" ] && [ -d "$RELEASE_DIR" ]; then
     rm -rf "$RELEASE_DIR"
+  fi
+  if [[ "${BUNNY_STREAM_ENV_FILE:-}" == /tmp/app_casamento_bunny_stream_*.env ]]; then
+    rm -f -- "$BUNNY_STREAM_ENV_FILE"
   fi
 }
 
@@ -41,6 +45,68 @@ read_env_value() {
   line="$(grep -E "^${key}=" "$env_file" | tail -n 1 || true)"
   [ -n "$line" ] || return 0
   printf '%s\n' "${line#*=}" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
+}
+
+sync_bunny_stream_env() {
+  local source_file="$1"
+  local target_file="$2"
+  local keys=(
+    BUNNY_STREAM_LIBRARY_ID
+    BUNNY_STREAM_API_KEY
+    BUNNY_STREAM_PULL_ZONE_HOSTNAME
+    BUNNY_STREAM_WEBHOOK_SECRET
+  )
+  local key count merged_env next_env
+
+  if [ ! -f "$source_file" ]; then
+    echo "Configuracao temporaria do Bunny Stream nao encontrada." >&2
+    exit 1
+  fi
+
+  for key in "${keys[@]}"; do
+    count="$(grep -Ec "^${key}=.+$" "$source_file" || true)"
+    if [ "$count" -ne 1 ]; then
+      echo "Configuracao invalida para $key." >&2
+      exit 1
+    fi
+  done
+
+  merged_env="$(mktemp "$APP_PATH/.env.merge.XXXXXX")"
+  cp "$target_file" "$merged_env"
+
+  for key in "${keys[@]}"; do
+    next_env="${merged_env}.next"
+    awk -v key="$key" -v source_file="$source_file" '
+      BEGIN {
+        while ((getline source_line < source_file) > 0) {
+          if (index(source_line, key "=") == 1) {
+            replacement = source_line
+            break
+          }
+        }
+        close(source_file)
+      }
+      index($0, key "=") == 1 {
+        if (!replaced) {
+          print replacement
+          replaced = 1
+        }
+        next
+      }
+      { print }
+      END {
+        if (!replaced) {
+          print replacement
+        }
+      }
+    ' "$merged_env" > "$next_env"
+    mv "$next_env" "$merged_env"
+  done
+
+  chmod 600 "$merged_env"
+  mv "$merged_env" "$target_file"
+  chmod 600 "$target_file"
+  echo "Configuracao do Bunny Stream sincronizada no .env da VPS."
 }
 
 compose_cmd() {
@@ -127,6 +193,19 @@ if [ ! -f ".env" ]; then
   echo "Arquivo .env nao encontrado na VPS em $APP_PATH." >&2
   echo "Crie o .env a partir de .env.production.example antes do deploy." >&2
   exit 1
+fi
+
+if [ -n "$BUNNY_STREAM_ENV_FILE" ]; then
+  case "$BUNNY_STREAM_ENV_FILE" in
+    /tmp/app_casamento_bunny_stream_*.env) ;;
+    *)
+      echo "BUNNY_STREAM_ENV_FILE aponta para um caminho inseguro." >&2
+      exit 1
+      ;;
+  esac
+  sync_bunny_stream_env "$BUNNY_STREAM_ENV_FILE" "$APP_PATH/.env"
+  rm -f -- "$BUNNY_STREAM_ENV_FILE"
+  BUNNY_STREAM_ENV_FILE=""
 fi
 
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(read_env_value COMPOSE_PROJECT_NAME "$APP_PATH/.env")}"

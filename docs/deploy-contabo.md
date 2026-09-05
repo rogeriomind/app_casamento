@@ -75,9 +75,13 @@ VPS_USER=deploy
 VPS_PORT=22
 VPS_SSH_KEY=<chave_privada_ssh>
 APP_PATH=/opt/apps/app_casamento
+BUNNY_STREAM_LIBRARY_ID=<ID_DA_STREAM_LIBRARY>
+BUNNY_STREAM_API_KEY=<API_KEY_DA_STREAM_LIBRARY>
+BUNNY_STREAM_PULL_ZONE_HOSTNAME=<HOSTNAME_DA_PULL_ZONE_STREAM>
+BUNNY_STREAM_WEBHOOK_SECRET=<READ_ONLY_API_KEY_DO_WEBHOOK_STREAM>
 ```
 
-Nao envie `.env` de producao pelo GitHub Actions.
+O workflow nao envia o `.env` completo. Ele cria um arquivo temporario contendo apenas as quatro variaveis do Bunny Stream, transfere-o com as mesmas credenciais SSH do deploy, atualiza essas chaves atomicamente no `.env` preservado da VPS e remove o arquivo temporario. O deploy falha antes da conexao se algum secret estiver ausente ou malformado.
 
 ## Bootstrap
 
