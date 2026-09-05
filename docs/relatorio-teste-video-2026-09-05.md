@@ -122,3 +122,21 @@ Depois da confirmacao de que a configuracao havia sido concluida, foi realizado 
 Resultado: **falha reproduzida novamente em producao**. A aplicacao retornou para **Minhas fotos**, exibiu `Nao foi possivel publicar as fotos agora.` e ofereceu o botao **Tentar novamente**. O video nao apareceu na galeria.
 
 Como o mesmo arquivo concluiu todo o fluxo no ambiente local, este reteste reforca que a pendencia esta no ambiente de producao: as variaveis precisam estar disponiveis para o processo em execucao e o container deve ter sido recriado apos a alteracao do `.env`. Tambem deve ser verificado se o `.env` alterado e exatamente `/opt/apps/app_casamento/.env`, que e o arquivo carregado pelo `docker-compose.yml`.
+
+## Correcao aplicada e validacao final
+
+A causa foi corrigida no commit `6358e08`: o workflow de deploy passou a consumir quatro GitHub Secrets separados, validar formato e presenca, transferir somente essas variaveis em um arquivo temporario com permissao restrita, atualizar atomicamente as chaves correspondentes no `.env` da VPS e remover o arquivo temporario. Os demais valores do `.env` de producao continuam preservados.
+
+Os secrets foram sincronizados a partir do `.env` local sem exibir seus valores. O workflow `33982528307` concluiu com sucesso as etapas de validacao, sincronizacao, deploy, healthcheck remoto e limpeza.
+
+O teste final em producao, novamente como convidado e usando o mesmo MP4, apresentou:
+
+- inicializacao do video: sucesso;
+- upload TUS: sucesso;
+- mensagem da interface: `Video enviado. Ele aparecera na galeria apos o processamento.`;
+- processamento confirmado na biblioteca Bunny Stream, com miniatura e duracao de 2 segundos;
+- webhook concluido e video publicado em **Minhas fotos**;
+- pre-visualizacao aberta com o player Bunny;
+- reproducao iniciada com sucesso, com avanco do tempo e controle alterado de **play** para **pause**.
+
+**Status final: resolvido e validado de ponta a ponta em producao.**
