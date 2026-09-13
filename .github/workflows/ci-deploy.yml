@@ -75,6 +75,7 @@ jobs:
           cache-dependency-path: apps/portal/package-lock.json
       - run: npm ci
       - run: npm run db:generate
+      - run: bash -n ../../deploy/portal-deploy.sh ../../deploy/verify-production.sh
       - run: npm run test
       - run: npm run typecheck
       - run: npm run build
@@ -189,8 +190,7 @@ jobs:
           ssh -i ~/.ssh/vps_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "PORTAL_APP_PATH='$PORTAL_APP_PATH' RELEASE_TARBALL='$PORTAL_RELEASE_TARBALL' PORTAL_ENV_FILE='$PORTAL_ENV_FILE' COMMIT_SHA='$COMMIT_SHA' bash -s" < deploy/portal-deploy.sh
       - name: Verify both health endpoints
         run: |
-          set -euo pipefail
-          ssh -i ~/.ssh/vps_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "APP_PATH='$APP_PATH' PORTAL_APP_PATH='$PORTAL_APP_PATH' bash -lc 'set -e; app_port=\$(grep -E \"^APP_PORT=\" \"\$APP_PATH/.env\" | tail -n 1 | cut -d= -f2-); portal_port=\$(grep -E \"^APP_PORT=\" \"\$PORTAL_APP_PATH/.env\" | tail -n 1 | cut -d= -f2-); curl -fsS http://127.0.0.1:\$app_port/api/health; curl -fsS http://127.0.0.1:\$portal_port/api/health'"
+          ssh -i ~/.ssh/vps_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "APP_PATH='$APP_PATH' PORTAL_APP_PATH='$PORTAL_APP_PATH' COMMIT_SHA='$COMMIT_SHA' bash -s" < deploy/verify-production.sh
       - name: Cleanup temporary secrets
         if: always()
         run: |
