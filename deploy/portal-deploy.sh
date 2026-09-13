@@ -10,8 +10,12 @@ KEEP_RELEASES="${KEEP_RELEASES:-5}"
 RELEASE_DIR=""
 
 cleanup() {
+  local status=$?
+  set +e
   [ -z "${RELEASE_DIR:-}" ] || [ ! -d "$RELEASE_DIR" ] || rm -rf "$RELEASE_DIR"
   [[ "${PORTAL_ENV_FILE:-}" == /tmp/app_casamento_portal_*.env ]] && rm -f -- "$PORTAL_ENV_FILE" || true
+  trap - EXIT
+  exit "$status"
 }
 trap cleanup EXIT
 
@@ -68,7 +72,12 @@ compose_cmd() {
 }
 
 if command -v ss >/dev/null 2>&1 && ss -lnt | awk '{print $4}' | grep -Eq ":${APP_PORT}$"; then
-  if ! docker ps --format '{{.Names}} {{.Ports}}' | grep -q "app-casamento-portal.*127.0.0.1:${APP_PORT}->3000"; then
+  existing_app_id="$(compose_cmd ps -q app 2>/dev/null || true)"
+  existing_app_port=""
+  if [ -n "$existing_app_id" ]; then
+    existing_app_port="$(docker port "$existing_app_id" 3000/tcp 2>/dev/null | awk -F: 'NR == 1 { print $NF }' || true)"
+  fi
+  if [ "$existing_app_port" != "$APP_PORT" ]; then
     selected=""
     for candidate in $(seq 3012 3099); do
       if ! ss -lnt | awk '{print $4}' | grep -Eq ":${candidate}$"; then selected="$candidate"; break; fi
@@ -76,6 +85,7 @@ if command -v ss >/dev/null 2>&1 && ss -lnt | awk '{print $4}' | grep -Eq ":${AP
     [ -n "$selected" ] || { echo "Nenhuma porta livre entre 3012 e 3099." >&2; exit 1; }
     sed "s/^APP_PORT=.*/APP_PORT=${selected}/" "$PORTAL_APP_PATH/.env" > "$PORTAL_APP_PATH/.env.port"
     mv "$PORTAL_APP_PATH/.env.port" "$PORTAL_APP_PATH/.env"
+    chmod 600 "$PORTAL_APP_PATH/.env"
     APP_PORT="$selected"
     export APP_PORT
     echo "APP_PORT ocupada; portal selecionado na porta $APP_PORT. Atualize o proxy HTTPS."
