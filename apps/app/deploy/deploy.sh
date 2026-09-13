@@ -7,7 +7,7 @@ BRANCH="${BRANCH:-main}"
 COMMIT_SHA="${COMMIT_SHA:-unknown}"
 RELEASE_TARBALL="${RELEASE_TARBALL:-}"
 REPO_URL="${REPO_URL:-}"
-BACKUP_ROOT="${BACKUP_ROOT:-/opt/backups/app_casamento}"
+BACKUP_ROOT="${BACKUP_ROOT:-$APP_PATH/.backups}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
 RUN_REMOTE_NODE_PREFLIGHT="${RUN_REMOTE_NODE_PREFLIGHT:-1}"
 BUNNY_STREAM_ENV_FILE="${BUNNY_STREAM_ENV_FILE:-}"
@@ -141,6 +141,7 @@ if [ -n "$RELEASE_TARBALL" ]; then
     -mindepth 1 \
     -maxdepth 1 \
     ! -name ".env" \
+    ! -name ".backups" \
     ! -name ".releases" \
     ! -name ".deploy-state" \
     -exec rm -rf -- {} +
@@ -265,6 +266,7 @@ install -d -m 755 "$APP_PATH/.releases"
 tar \
   --exclude='.git' \
   --exclude='.env' \
+  --exclude='.backups' \
   --exclude='node_modules' \
   --exclude='.next' \
   --exclude='.releases' \

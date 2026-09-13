@@ -5,7 +5,7 @@ set -euo pipefail
 : "${RELEASE_TARBALL:?RELEASE_TARBALL nao informado.}"
 COMMIT_SHA="${COMMIT_SHA:-unknown}"
 PORTAL_ENV_FILE="${PORTAL_ENV_FILE:-}"
-BACKUP_ROOT="${BACKUP_ROOT:-/opt/backups/app_casamento_portal}"
+BACKUP_ROOT="${BACKUP_ROOT:-$PORTAL_APP_PATH/.backups}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
 RELEASE_DIR=""
 
@@ -94,10 +94,10 @@ if [ -n "$(compose_cmd ps -q db 2>/dev/null || true)" ]; then
   [ -f "$backup_dir/postgres.sql" ] && chmod 600 "$backup_dir/postgres.sql" || true
 fi
 
-find "$PORTAL_APP_PATH" -mindepth 1 -maxdepth 1 ! -name .env ! -name data ! -name .releases ! -name .deploy-state -exec rm -rf -- {} +
+find "$PORTAL_APP_PATH" -mindepth 1 -maxdepth 1 ! -name .env ! -name data ! -name .backups ! -name .releases ! -name .deploy-state -exec rm -rf -- {} +
 cp -a "$RELEASE_DIR"/. "$PORTAL_APP_PATH"/
 rm -f "$RELEASE_TARBALL"
-tar --exclude='.env' --exclude='data' --exclude='.releases' --exclude='node_modules' --exclude='.next' -czf "$PORTAL_APP_PATH/.releases/$timestamp-$COMMIT_SHA.tar.gz" -C "$PORTAL_APP_PATH" .
+tar --exclude='.env' --exclude='data' --exclude='.backups' --exclude='.releases' --exclude='node_modules' --exclude='.next' -czf "$PORTAL_APP_PATH/.releases/$timestamp-$COMMIT_SHA.tar.gz" -C "$PORTAL_APP_PATH" .
 compose_cmd config >/dev/null
 compose_cmd up -d --build --remove-orphans
 install -d -m 755 "$PORTAL_APP_PATH/.deploy-state"
