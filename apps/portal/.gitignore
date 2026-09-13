@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+.env*
+!.env.example
+!.env.production.example
+/artifacts/
+/.local/
+/_migration_backup/
+/apps/*/.env
+/apps/*/.local/
+/apps/*/node_modules/
+/apps/*/.next/
