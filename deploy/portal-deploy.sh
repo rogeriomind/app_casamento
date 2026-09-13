@@ -100,7 +100,7 @@ chmod 600 "$backup_dir/env.backup"
 if [ -n "$(compose_cmd ps -q db 2>/dev/null || true)" ]; then
   db_name="$(read_env_value POSTGRES_DB "$PORTAL_APP_PATH/.env")"
   db_user="$(read_env_value POSTGRES_USER "$PORTAL_APP_PATH/.env")"
-  [ -z "$db_name" ] || [ -z "$db_user" ] || compose_cmd exec -T db pg_dump -U "$db_user" "$db_name" > "$backup_dir/postgres.sql" || true
+  [ -z "$db_name" ] || [ -z "$db_user" ] || compose_cmd exec -T db pg_dump -U "$db_user" "$db_name" < /dev/null > "$backup_dir/postgres.sql" || true
   [ -f "$backup_dir/postgres.sql" ] && chmod 600 "$backup_dir/postgres.sql" || true
 fi
 
