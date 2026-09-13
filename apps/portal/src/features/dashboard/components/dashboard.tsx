@@ -1,6 +1,4 @@
 import Link from "next/link";
-import type { CSSProperties } from "react";
-import { AlbumSidebar } from "./album-sidebar";
 import { DashboardIcon } from "./dashboard-icon";
 import styles from "./dashboard.module.css";
 
@@ -13,6 +11,7 @@ type DashboardPhoto = {
   mediaType: "IMAGE" | "VIDEO";
   tags: string[];
   durationSeconds: number | null;
+  grant: string;
 };
 
 type DashboardProps = {
@@ -36,18 +35,16 @@ export function AlbumDashboard({ event, user, metrics, recentPhotos }: Dashboard
   const firstName = user.name.trim().split(/\s+/)[0] || "por aqui";
   const albumName = event.name?.trim() || "Seu álbum";
   const names = event.displayNames?.trim() || user.name;
-  const imageUrl = (photo: DashboardPhoto) => `/api/eventos/${event.id}/fotos/${photo.id}?variante=miniatura`;
+  const imageUrl = (photo: DashboardPhoto) => `/api/eventos/${event.id}/fotos/${photo.id}?variante=miniatura&grant=${encodeURIComponent(photo.grant)}`;
   const photoHref = (photo: DashboardPhoto) => `/eventos/${event.id}/fotos?foto=${photo.id}`;
   const eventCover = event.coverPath
     ? `/api/eventos/${event.id}/capa?variante=miniatura`
     : recentPhotos[0]
       ? imageUrl(recentPhotos[0])
-      : "/images/login/party.lossless.webp";
+      : "/images/optimized/party-480.webp";
 
   return (
-    <div className={styles.shell} style={{ "--album-color": event.albumColor } as CSSProperties}>
-      <AlbumSidebar eventId={event.id} userName={user.name} active="dashboard" styles={styles} />
-
+    <div className={styles.shell}>
       <main id="dashboard" className={styles.main}>
         <header className={styles.header}>
           <div className={styles.welcome}>
@@ -55,7 +52,7 @@ export function AlbumDashboard({ event, user, metrics, recentPhotos }: Dashboard
             <h1>Olá, {firstName}! <span aria-hidden="true">👋</span></h1>
             <p>{event.description?.trim() || "Seu evento está incrível! Veja o resumo e acompanhe as fotos em tempo real."}</p>
           </div>
-          <img className={styles.heroBanner} src="/images/dashboard/colecione-momentos.png" alt="Casal contemplando o pôr do sol" />
+          <img className={styles.heroBanner} src="/images/optimized/colecione-momentos-640.webp" srcSet="/images/optimized/colecione-momentos-640.webp 640w, /images/optimized/colecione-momentos-1280.webp 1280w" sizes="(max-width: 720px) calc(100vw - 32px), 42vw" width="2048" height="768" fetchPriority="high" decoding="async" alt="Casal contemplando o pôr do sol" />
         </header>
 
         <dl className={styles.metrics}>
@@ -100,8 +97,8 @@ function Metric({ icon, value, label }: { icon: "image" | "people" | "heart" | "
 }
 
 function MediaCard({ photo, href, src, eager }: { photo: DashboardPhoto; href: string; src: string; eager: boolean }) {
-  return <Link className={styles.photoLink} href={href} prefetch={false} aria-label={`Abrir ${photo.altText}`}>
-    <img src={src} alt={photo.altText} width={photo.width ?? 640} height={photo.height ?? 640} loading={eager ? "eager" : "lazy"} fetchPriority={eager ? "high" : "auto"} decoding="async" />
+  return <Link className={styles.photoLink} href={href} aria-label={`Abrir ${photo.altText}`}>
+    <img src={`${src}&largura=640`} srcSet={`${src}&largura=320 320w, ${src}&largura=640 640w, ${src}&largura=960 960w`} sizes="(max-width: 540px) 48vw, (max-width: 900px) 31vw, 18vw" alt={photo.altText} width={photo.width ?? 640} height={photo.height ?? 640} loading={eager ? "eager" : "lazy"} fetchPriority={eager ? "high" : "auto"} decoding="async" />
     {photo.mediaType === "VIDEO" && <span className={styles.videoBadge}>▶ Vídeo{photo.durationSeconds ? ` · ${photo.durationSeconds}s` : ""}</span>}
   </Link>;
 }

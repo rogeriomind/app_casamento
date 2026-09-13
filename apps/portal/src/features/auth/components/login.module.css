@@ -50,9 +50,9 @@
 .partyPhoto { left: calc(613 * var(--u)); top: calc(435 * var(--u)); width: calc(333 * var(--u)); height: calc(288 * var(--u)); transform: rotate(11.5deg); z-index: 2; }
 .phonePhoto { left: calc(562 * var(--u)); top: calc(694 * var(--u)); width: calc(218 * var(--u)); height: calc(225 * var(--u)); transform: rotate(-6.8deg); z-index: 3; }
 @media (min-width: 1001px) {
-  .dinnerPhoto { background-image: url("/images/login/dinner.lossless.webp"); }
-  .partyPhoto { background-image: url("/images/login/party.lossless.webp"); }
-  .phonePhoto { background-image: url("/images/login/phone.lossless.webp"); }
+  .dinnerPhoto { background-image: image-set(url("/images/optimized/dinner-480.webp") 1x, url("/images/optimized/dinner-960.webp") 2x); }
+  .partyPhoto { background-image: image-set(url("/images/optimized/party-480.webp") 1x, url("/images/optimized/party-960.webp") 2x); }
+  .phonePhoto { background-image: image-set(url("/images/optimized/phone-320.webp") 1x, url("/images/optimized/phone-640.webp") 2x); }
 }
 .photoRays { position: absolute; left: calc(503 * var(--u)); top: calc(136 * var(--u)); width: calc(60 * var(--u)); height: calc(90 * var(--u)); stroke: var(--ink); stroke-width: 3.3; stroke-linecap: round; }
 .limeNote { position: absolute; left: calc(802 * var(--u)); top: calc(346 * var(--u)); width: calc(177 * var(--u)); height: calc(179 * var(--u)); border-radius: 50%; background: #e0fb89; display: flex; align-items: center; justify-content: center; z-index: 4; }

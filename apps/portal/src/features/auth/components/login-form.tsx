@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { requestJson, jsonOptions } from "@/lib/client-api";
 import { GoogleMark, LoginIcon } from "./login-icons";
 import styles from "./login.module.css";
 
 export function LoginForm() {
+  const router = useRouter();
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -15,7 +17,9 @@ export function LoginForm() {
   const [isStartingSignup, setIsStartingSignup] = useState(false);
   const [availability, setAvailability] = useState("");
 
-  async function startSignup() {
+  useEffect(() => { router.prefetch("/cadastro?nova-conta=1"); }, [router]);
+
+  function startSignup() {
     if (isStartingSignup) return;
     setIsStartingSignup(true);
     setErrors((current) => ({ ...current, form: "" }));
@@ -23,7 +27,7 @@ export function LoginForm() {
     // pessoa efetivamente concluir outro cadastro. O parâmetro permite que a
     // página de cadastro não redirecione uma sessão já autenticada para a
     // tela de conclusão da conta existente.
-    window.location.assign("/cadastro?nova-conta=1");
+    router.push("/cadastro?nova-conta=1");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -57,7 +61,7 @@ export function LoginForm() {
             setErrors((current) => ({ ...current, form: "Confirme seu e-mail antes de entrar." }));
             return;
           }
-          window.location.assign("/cadastro/confirmar-email");
+          router.replace("/cadastro/confirmar-email");
           return;
         }
         const message = error.message?.toLowerCase() ?? "";
@@ -70,7 +74,7 @@ export function LoginForm() {
         return;
       }
 
-      window.location.assign("/logou");
+      router.replace("/logou");
       } catch (error) {
         setErrors((current) => ({ ...current, form: (error as Error).message }));
       } finally { setIsSubmitting(false); }

@@ -17,7 +17,7 @@
     "capture:sync-all": "node --conditions=react-server --import tsx scripts/sync-capture-all.ts",
     "db:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postgres.ps1 start",
     "db:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postgres.ps1 stop",
-    "test": "node --import tsx --test tests/*.unit.test.ts",
+    "test": "node --conditions=react-server --import tsx --test tests/*.unit.test.ts",
     "typecheck": "tsc --noEmit",
     "pretest:e2e": "npm run build && npm run db:test:deploy",
     "test:e2e": "playwright test"

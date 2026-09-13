@@ -4,7 +4,8 @@ import sharp from "sharp";
 import { apiResponse, apiUser, HttpError } from "@/lib/api";
 import { PhotoOrigin } from "@/generated/prisma/client";
 import { isCaptureMediaUrl } from "@/lib/capture-integration";
-import { cacheCaptureThumbnail, isSafeMediaKey, readCachedCaptureThumbnail, readMediaVariant } from "@/lib/media-storage";
+import { verifyMediaGrant } from "@/lib/media-grant";
+import { cacheCaptureThumbnail, isSafeMediaKey, readCachedCaptureThumbnail, readCaptureThumbnailVariant, readMediaVariant } from "@/lib/media-storage";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string; photoId: string }> };
@@ -15,21 +16,21 @@ const maxRemoteImageBytes = 15 * 1024 * 1024;
 const remoteCacheSeconds = 30 * 24 * 60 * 60;
 const allowedImageMimeTypes = new Set(["image/avif", "image/jpeg", "image/png", "image/webp"]);
 
-function cacheHeaders(etag: string) {
-  return { "Cache-Control": "private, no-cache", ETag: etag, "X-Content-Type-Options": "nosniff" };
+function cacheHeaders(etag: string, granted: boolean) {
+  return { "Cache-Control": granted ? "private, max-age=900, immutable" : "private, no-cache", ETag: etag, "X-Content-Type-Options": "nosniff" };
 }
 
 function mediaEtag(value: string) {
   return `"${createHash("sha256").update(value).digest("base64url")}"`;
 }
 
-function notModified(request: Request, etag: string) {
+function notModified(request: Request, etag: string, granted: boolean) {
   return request.headers.get("if-none-match")?.split(",").map((value) => value.trim()).includes(etag)
-    ? new NextResponse(null, { status: 304, headers: cacheHeaders(etag) })
+    ? new NextResponse(null, { status: 304, headers: cacheHeaders(etag, granted) })
     : null;
 }
 
-async function remoteImage(url: string, etag: string, convertHeif = false, cacheThumbnail = false) {
+async function remoteImage(url: string, etag: string, granted: boolean, convertHeif = false, cacheThumbnail = false, requestedWidth: number | null = null) {
   const sourceOrigin = new URL(process.env.CAPTURE_API_BASE_URL ?? "https://digax.productpulse.com.br").origin;
   let response: Response | undefined;
   let lastError: unknown;
@@ -85,58 +86,69 @@ async function remoteImage(url: string, etag: string, convertHeif = false, cache
       const metadata = await decoder.metadata();
       if (metadata.format !== "heif") throw new Error("Formato HEIF inválido.");
       const compatible = await decoder.rotate().webp({ quality: 92, effort: 4 }).toBuffer();
-      return new NextResponse(compatible, { headers: { ...cacheHeaders(etag), "Content-Type": "image/webp" } });
+      return new NextResponse(compatible, { headers: { ...cacheHeaders(etag, granted), "Content-Type": "image/webp" } });
     } catch { throw new HttpError(404, "Mídia indisponível."); }
   }
   if (cacheThumbnail) await cacheCaptureThumbnail(url, bytes, contentType).catch(() => {});
-  return new NextResponse(bytes, { headers: { ...cacheHeaders(etag), "Content-Type": contentType } });
+  if (requestedWidth) {
+    try {
+      const resized = await sharp(bytes, { limitInputPixels: 40_000_000, failOn: "error" }).rotate().resize({ width: requestedWidth, height: requestedWidth, fit: "inside", withoutEnlargement: true }).webp({ quality: 84, effort: 4 }).toBuffer();
+      return new NextResponse(resized, { headers: { ...cacheHeaders(etag, granted), "Content-Type": "image/webp" } });
+    } catch { throw new HttpError(404, "Mídia indisponível."); }
+  }
+  return new NextResponse(bytes, { headers: { ...cacheHeaders(etag, granted), "Content-Type": contentType } });
 }
 
 export async function GET(request: Request, { params }: Params) {
   return apiResponse(request, async () => {
-    const user = await apiUser();
     const { id, photoId } = await params;
+    const searchParams = new URL(request.url).searchParams;
+    const granted = verifyMediaGrant(searchParams.get("grant"), id, photoId);
+    const user = granted ? null : await apiUser();
     const photo = await prisma.photo.findFirst({
-      where: { id: photoId, eventId: id, isVisible: true, event: { ownerId: user.id } },
+      where: { id: photoId, eventId: id, isVisible: true, ...(user ? { event: { ownerId: user.id } } : {}) },
       select: { origin: true, storageKey: true, originalStorageKey: true, originalMime: true, mime: true, width: true, height: true, remoteImageUrl: true, remoteThumbnailUrl: true, event: { select: { captureIntegration: { select: { sourceClientHash: true, sourceStoragePrefix: true } } } } },
     });
 
     if (!photo) throw new HttpError(404, "Foto não encontrada.");
     if (photo.origin === PhotoOrigin.CAPTURE) {
-      const variant = new URL(request.url).searchParams.get("variante") ?? "original";
+      const variant = searchParams.get("variante") ?? "original";
       if (variant !== "original" && variant !== "miniatura") throw new HttpError(400, "Variante de mídia inválida.");
+      const requestedWidth = variant === "miniatura" && [320, 640, 960].includes(Number(searchParams.get("largura"))) ? Number(searchParams.get("largura")) : null;
       const originalIsBrowserUnsupported = /\.hei[cf](?:$|[?#])/i.test(photo.remoteImageUrl ?? "");
       const convertHeif = variant === "original" && originalIsBrowserUnsupported;
       const url = variant === "miniatura" ? photo.remoteThumbnailUrl ?? photo.remoteImageUrl : photo.remoteImageUrl ?? photo.remoteThumbnailUrl;
       if (!url || !isCaptureMediaUrl(url, { clientHash: photo.event.captureIntegration?.sourceClientHash, storagePrefix: photo.event.captureIntegration?.sourceStoragePrefix })) throw new HttpError(404, "Mídia indisponível.");
-      const etag = mediaEtag(`capture:${variant}:${url}`);
-      const cached = notModified(request, etag);
+      const etag = mediaEtag(`capture:${variant}:${requestedWidth ?? "source"}:${url}`);
+      const cached = notModified(request, etag, granted);
       if (cached) return cached;
       const localCache = variant === "miniatura" ? await readCachedCaptureThumbnail(url) : null;
       if (localCache) {
-        return new NextResponse(new Uint8Array(localCache.bytes), { headers: { ...cacheHeaders(etag), "Content-Type": localCache.mime } });
+        const result = requestedWidth ? await readCaptureThumbnailVariant(url, localCache, requestedWidth) : localCache;
+        return new NextResponse(new Uint8Array(result.bytes), { headers: { ...cacheHeaders(etag, granted), "Content-Type": result.mime } });
       }
-      try { return await remoteImage(url, etag, convertHeif, variant === "miniatura"); }
+      try { return await remoteImage(url, etag, granted, convertHeif, variant === "miniatura", requestedWidth); }
       catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(404, "Mídia indisponível."); }
     }
 
     if (!photo.storageKey || !isSafeMediaKey(photo.storageKey)) throw new HttpError(404, "Foto não encontrada.");
-    const variant = new URL(request.url).searchParams.get("variante") ?? "original";
+    const variant = searchParams.get("variante") ?? "original";
     if (variant !== "original" && variant !== "miniatura") throw new HttpError(400, "Variante de mídia inválida.");
+    const requestedWidth = variant === "miniatura" && [320, 640, 960].includes(Number(searchParams.get("largura"))) ? Number(searchParams.get("largura")) : 1200;
     const useOriginal = variant === "original" && photo.originalStorageKey && isSafeMediaKey(photo.originalStorageKey);
     const responseKey = useOriginal ? photo.originalStorageKey! : photo.storageKey;
-    const etag = mediaEtag(`local:${variant}:${responseKey}`);
-    const cached = notModified(request, etag);
+    const etag = mediaEtag(`local:${variant}:${requestedWidth}:${responseKey}`);
+    const cached = notModified(request, etag, granted);
     if (cached) return cached;
 
     try {
       const image = useOriginal
         ? await readMediaVariant(photo.originalStorageKey!, "original", null, null)
-        : await readMediaVariant(photo.storageKey, variant, photo.width, photo.height);
+        : await readMediaVariant(photo.storageKey, variant, photo.width, photo.height, requestedWidth);
       return new NextResponse(new Uint8Array(image), {
         headers: {
-          "Content-Type": useOriginal ? photo.originalMime ?? photo.mime : photo.mime,
-          ...cacheHeaders(etag),
+          "Content-Type": !useOriginal && variant === "miniatura" && ((photo.width ?? 0) > requestedWidth || (photo.height ?? 0) > requestedWidth) ? "image/webp" : useOriginal ? photo.originalMime ?? photo.mime : photo.mime,
+          ...cacheHeaders(etag, granted),
         },
       });
     } catch {

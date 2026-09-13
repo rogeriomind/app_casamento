@@ -1,27 +1,15 @@
 import { notFound, redirect } from "next/navigation";
 import { EventState } from "@/generated/prisma/client";
 import { AlbumDashboard } from "@/features/dashboard/components/dashboard";
+import { createMediaGrant } from "@/lib/media-grant";
+import { getOwnedEvent } from "@/lib/owned-event";
 import { prisma } from "@/lib/prisma";
 import { requireVerifiedUser } from "@/lib/session";
 
 export default async function EventDashboardPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireVerifiedUser();
   const { id } = await params;
-  const event = await prisma.event.findFirst({
-    where: { id, ownerId: user.id },
-    select: {
-      id: true,
-      name: true,
-      description: true,
-      type: true,
-      state: true,
-      albumColor: true,
-      coverPath: true,
-      displayNames: true,
-      eventDate: true,
-      venue: true,
-    },
-  });
+  const event = await getOwnedEvent(id, user.id);
 
   if (!event) notFound();
   if (event.state !== EventState.CREATED) redirect("/eventos/novo/personalizacao");
@@ -33,5 +21,5 @@ export default async function EventDashboardPage({ params }: { params: Promise<{
     prisma.photo.findMany({ where: { ...visible, mediaType: "IMAGE" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 8, select: { id: true, altText: true, collection: true, width: true, height: true, mediaType: true, tags: true, durationSeconds: true } }),
     prisma.captureIntegration.findUnique({ where: { eventId: event.id }, select: { lastSyncAt: true, lastError: true, remoteGuestSessions: true } }),
   ]);
-  return <AlbumDashboard event={{ ...event, eventDate: event.eventDate?.toISOString() ?? null }} user={{ name: user.name }} metrics={{ mediaCount, videoCount, likes: likes._sum.likeCount ?? 0, guestSessions: integration?.remoteGuestSessions ?? 0 }} recentPhotos={recentPhotos} />;
+  return <AlbumDashboard event={{ ...event, eventDate: event.eventDate?.toISOString() ?? null }} user={{ name: user.name }} metrics={{ mediaCount, videoCount, likes: likes._sum.likeCount ?? 0, guestSessions: integration?.remoteGuestSessions ?? 0 }} recentPhotos={recentPhotos.map((photo) => ({ ...photo, grant: createMediaGrant(event.id, photo.id) }))} />;
 }

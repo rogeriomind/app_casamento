@@ -1,12 +1,11 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import { AlbumSidebar } from "./album-sidebar";
 import { CaptureSync } from "./capture-sync";
 import { DashboardIcon } from "./dashboard-icon";
 import { FavoriteButton } from "./favorite-button";
 import { GalleryToolbar } from "./gallery-toolbar";
 import { GalleryThumbnail } from "./gallery-thumbnail";
-import { GalleryFocusRestore, MediaDialog } from "./media-dialog";
+import { GalleryModalProvider, GalleryOpenLink } from "./gallery-modal-controller";
 import styles from "./album-gallery.module.css";
 
 type GalleryPhoto = {
@@ -15,7 +14,7 @@ type GalleryPhoto = {
   collection: string | null;
   width: number | null;
   height: number | null;
-  createdAt: Date;
+  createdAt: string;
   mediaType: "IMAGE" | "VIDEO";
   tags: string[];
   authorName: string | null;
@@ -23,11 +22,11 @@ type GalleryPhoto = {
   durationSeconds: number | null;
   remoteEmbedUrl: string | null;
   isFavorite: boolean;
+  grant: string;
 };
 
 type GalleryProps = {
   event: { id: string; name: string | null; albumColor: string; coverPath: string | null };
-  user: { name: string };
   photos: GalleryPhoto[];
   total: number;
   albumTotal: number;
@@ -73,14 +72,14 @@ function recordLabel(photo: GalleryPhoto) {
   const kind = photo.mediaType === "VIDEO" ? `vídeo${duration ? ` de ${duration}` : ""}` : "foto";
   const author = photo.authorName?.trim() ? ` enviado por ${photo.authorName.trim()}` : "";
   const tagLabel = photo.tags.length ? `, tags ${photo.tags.slice(0, 3).join(" e ")}` : "";
-  const date = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(photo.createdAt);
+  const date = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date(photo.createdAt));
   return `Abrir ${kind}${author}${tagLabel}, publicado em ${date}`;
 }
 
 export function AlbumGallery(props: GalleryProps) {
-  const { event, user, photos, total, albumTotal, favoriteTotal, page, hasNextPage, selectedPhoto, scope, search, type, period, tag, author, order, view, tags, capture } = props;
+  const { event, photos, total, albumTotal, favoriteTotal, page, hasNextPage, selectedPhoto, scope, search, type, period, tag, author, order, view, tags, capture } = props;
   const route = `/eventos/${event.id}/fotos`;
-  const imageUrl = (photo: GalleryPhoto) => `/api/eventos/${event.id}/fotos/${photo.id}?variante=miniatura`;
+  const imageUrl = (photo: GalleryPhoto) => `/api/eventos/${event.id}/fotos/${photo.id}?variante=miniatura&grant=${encodeURIComponent(photo.grant)}`;
   const paramsFor = (next: GalleryParams) => {
     const query = new URLSearchParams();
     const nextPage = next.page ?? page;
@@ -116,9 +115,8 @@ export function AlbumGallery(props: GalleryProps) {
   ].filter(Boolean).join(" · ");
 
   return (
-    <div className={styles.shell} style={{ "--album-color": event.albumColor } as CSSProperties}>
-      <AlbumSidebar eventId={event.id} userName={user.name} active="photos" styles={styles} />
-
+    <GalleryModalProvider eventId={event.id} photos={photos} initialSelected={selectedPhoto} closeHref={closeUrl}>
+    <div className={styles.shell}>
       <main className={styles.page}>
         <section className={styles.content} aria-labelledby="gallery-title">
           <div className={styles.galleryHeader}>
@@ -158,7 +156,6 @@ export function AlbumGallery(props: GalleryProps) {
             </div>
           )}
 
-          <GalleryFocusRestore />
           {scope === "envios" ? (
             <UnavailableScope icon="send" title="Seus envios ainda não podem ser identificados" text="A captura do evento não associa cada registro à sua conta. Quando o envio autenticado estiver disponível, suas memórias aparecerão aqui." href={paramsFor({ page: 1, scope: "todas" })} />
           ) : photos.length ? (
@@ -184,21 +181,9 @@ export function AlbumGallery(props: GalleryProps) {
           )}
         </section>
 
-        {selectedPhoto && (
-          <MediaDialog closeHref={closeUrl} returnFocusId={selectedPhoto.id}>
-            {selectedPhoto.mediaType === "VIDEO" && selectedPhoto.remoteEmbedUrl
-              ? <iframe src={selectedPhoto.remoteEmbedUrl} title="Vídeo do casamento" loading="lazy" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;" allowFullScreen />
-              : <img src={`/api/eventos/${event.id}/fotos/${selectedPhoto.id}?variante=original`} alt={selectedPhoto.altText} width={selectedPhoto.width ?? 1000} height={selectedPhoto.height ?? 1000} />}
-            <div className={styles.detail}>
-              <div className={styles.detailTitle}><strong>{selectedPhoto.mediaType === "VIDEO" ? "Vídeo" : "Foto"} do álbum</strong><FavoriteButton eventId={event.id} photoId={selectedPhoto.id} initialFavorite={selectedPhoto.isFavorite} /></div>
-              <p>{selectedPhoto.authorName ? `Nome informado no envio: ${selectedPhoto.authorName}` : "Registro do evento"}</p>
-              <div><time dateTime={selectedPhoto.createdAt.toISOString()}>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(selectedPhoto.createdAt)}</time>{selectedPhoto.durationSeconds && <span>{durationLabel(selectedPhoto.durationSeconds)}</span>}<span>{selectedPhoto.likeCount} {selectedPhoto.likeCount === 1 ? "curtida no evento" : "curtidas no evento"}</span></div>
-              {selectedPhoto.tags.length > 0 && <ul>{selectedPhoto.tags.map((item) => <li key={item}>#{item}</li>)}</ul>}
-            </div>
-          </MediaDialog>
-        )}
       </main>
     </div>
+    </GalleryModalProvider>
   );
 }
 
@@ -206,7 +191,7 @@ function MediaItem({ eventId, photo, href, src, eager }: { eventId: string; phot
   const duration = durationLabel(photo.durationSeconds);
   return (
     <li id={photo.id} className={styles.mediaCard} style={{ "--media-ratio": `${photo.width ?? 4} / ${photo.height ?? 5}` } as CSSProperties}>
-      <Link className={styles.mediaLink} href={href} prefetch={false} aria-label={recordLabel(photo)}>
+      <GalleryOpenLink className={styles.mediaLink} href={href} photoId={photo.id} ariaLabel={recordLabel(photo)}>
         <span className={styles.preview}>
           <GalleryThumbnail src={src} alt={photo.altText} width={photo.width ?? 640} height={photo.height ?? 640} eager={eager} />
           {photo.mediaType === "VIDEO" && <i className={styles.videoBadge}><DashboardIcon name="eye" />{duration ?? "Vídeo"}</i>}
@@ -219,10 +204,10 @@ function MediaItem({ eventId, photo, href, src, eager }: { eventId: string; phot
         <span className={styles.cardInfo}>
           <strong>{photo.mediaType === "VIDEO" ? "Vídeo" : "Foto"} do álbum</strong>
           <span>{photo.authorName ? `Nome informado: ${photo.authorName}` : "Registro do evento"}</span>
-          <time dateTime={photo.createdAt.toISOString()}>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(photo.createdAt)}</time>
+          <time dateTime={photo.createdAt}>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(photo.createdAt))}</time>
           <span>{photo.likeCount} {photo.likeCount === 1 ? "curtida no evento" : "curtidas no evento"}</span>
         </span>
-      </Link>
+      </GalleryOpenLink>
       <FavoriteButton eventId={eventId} photoId={photo.id} initialFavorite={photo.isFavorite} />
     </li>
   );

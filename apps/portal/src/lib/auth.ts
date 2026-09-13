@@ -37,6 +37,13 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL ?? "http://127.0.0.1:3000",
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins,
+  session: {
+    cookieCache: {
+      enabled: true,
+      maxAge: 60,
+      strategy: "compact",
+    },
+  },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,

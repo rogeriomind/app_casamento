@@ -4,13 +4,13 @@
   --line: #e4ded4;
   --green: #2e654f;
   --lime: #c5ff41;
-  display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
-  min-height: 100svh;
+  display: block;
+  min-height: 100%;
   background: var(--paper);
   color: var(--ink);
   font-family: Inter, Arial, sans-serif;
 }
+
 .sidebar { display: flex; min-height: 100%; flex-direction: column; padding: 38px 24px 28px; border-right: 1px solid var(--line); background: #fbf9f4; }
 .brandLockup { align-self: center; padding: 0 0 39px; }
 .brandLockup > div { gap: 6px; }

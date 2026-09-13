@@ -1,7 +1,8 @@
 "use client";
 import { useRef, useState, type ChangeEvent } from "react";
+import { useRouter } from "next/navigation";
 import { LoginIcon } from "@/features/auth/components/login-icons";
-import { colorValues } from "@/lib/validation";
+import { colorValues } from "@/lib/event-constants";
 import { jsonOptions, requestJson } from "@/lib/client-api";
 import { WizardFrame } from "./wizard-frame";
 import { EventIcon } from "./event-icon";
@@ -9,6 +10,7 @@ import { useDraft, type Draft } from "./use-draft";
 import styles from "./event-wizard.module.css";
 const colorNames = ["Azul-marinho", "Verde", "Coral", "Areia", "Lavanda", "Preto"];
 export function PersonalizationStep({ draft }: { draft: Draft }) {
+  const router = useRouter();
   const form = useDraft(draft.id, "color", { albumColor: draft.albumColor });
   const fileRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState(draft.coverPath ? "/api/eventos/" + draft.id + "/capa" : "");
@@ -34,9 +36,9 @@ export function PersonalizationStep({ draft }: { draft: Draft }) {
     if (busy || uploading) return; setBusy(true); setError("");
     try {
       await form.flush();
-      if (mode === "back") { window.location.assign("/eventos/novo/informacoes"); return; }
+      if (mode === "back") { router.push("/eventos/novo/informacoes"); return; }
       await requestJson("/api/eventos/" + draft.id + "/concluir", jsonOptions("POST", { useDefaults: mode === "defaults", albumColor: form.value.albumColor }));
-      window.location.assign("/eventos/" + draft.id + "/criado");
+      router.push("/eventos/" + draft.id + "/criado");
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
   return <WizardFrame step={3}><section className={styles.content}>

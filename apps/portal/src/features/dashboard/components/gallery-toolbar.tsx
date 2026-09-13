@@ -1,5 +1,6 @@
 "use client";
 
+import Form from "next/form";
 import { useRef } from "react";
 import { DashboardIcon } from "./dashboard-icon";
 import styles from "./album-gallery.module.css";
@@ -19,7 +20,7 @@ export function GalleryToolbar({ action, search, type, period, tag, order, prese
   const applySelect = () => formRef.current?.requestSubmit();
 
   return (
-    <form ref={formRef} className={styles.toolbar} action={action} method="get" role="search">
+    <Form ref={formRef} className={styles.toolbar} action={action} role="search">
       {preserved.scope !== "todas" && <input type="hidden" name="aba" value={preserved.scope} />}
       {preserved.view !== "grade" && <input type="hidden" name="visualizacao" value={preserved.view} />}
       {preserved.author && <input type="hidden" name="autor" value={preserved.author} />}
@@ -63,6 +64,6 @@ export function GalleryToolbar({ action, search, type, period, tag, order, prese
       </label>
 
       <button className={styles.srOnly} type="submit">Aplicar busca e filtros</button>
-    </form>
+    </Form>
   );
 }

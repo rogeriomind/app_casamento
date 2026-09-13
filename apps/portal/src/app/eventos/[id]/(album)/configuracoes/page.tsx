@@ -1,20 +1,14 @@
 import { notFound, redirect } from "next/navigation";
 import { EventState } from "@/generated/prisma/client";
 import { EventSettings } from "@/features/dashboard/components/event-settings";
-import { prisma } from "@/lib/prisma";
+import { getOwnedEvent } from "@/lib/owned-event";
 import { requireVerifiedUser } from "@/lib/session";
-import { colorValues } from "@/lib/validation";
+import { colorValues } from "@/lib/event-constants";
 
 export default async function EventSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireVerifiedUser();
   const { id } = await params;
-  const event = await prisma.event.findFirst({
-    where: { id, ownerId: user.id },
-    select: {
-      id: true, type: true, name: true, eventDate: true, displayNames: true, eventTime: true, venue: true,
-      albumColor: true, albumStyle: true, welcomeMessage: true, coverPath: true, logoPath: true, state: true,
-    },
-  });
+  const event = await getOwnedEvent(id, user.id);
   if (!event) notFound();
   if (event.state !== EventState.CREATED) redirect("/eventos/novo/personalizacao");
 
@@ -22,7 +16,7 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
     ? event.albumColor as (typeof colorValues)[number]
     : colorValues[0];
 
-  return <EventSettings user={{ name: user.name }} event={{
+  return <EventSettings event={{
     ...event,
     albumColor,
     eventDate: event.eventDate?.toISOString().slice(0, 10) ?? "",

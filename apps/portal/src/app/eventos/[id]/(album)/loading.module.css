@@ -1,0 +1,13 @@
+.loading { min-height: 100svh; padding: clamp(24px, 3vw, 52px); overflow: hidden; }
+.heading, .subheading, .cards span { background: linear-gradient(100deg, #ebe7df 25%, #faf8f3 45%, #ebe7df 65%); background-size: 220% 100%; animation: shimmer 1.2s ease-in-out infinite; }
+.heading { width: min(360px, 72%); height: 44px; border-radius: 12px; }
+.subheading { width: min(540px, 92%); height: 16px; margin-top: 14px; border-radius: 8px; }
+.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 38px; }
+.cards span { min-height: 150px; border-radius: 16px; }
+@keyframes shimmer { to { background-position-x: -220%; } }
+@media (max-width: 760px) {
+  .loading { min-height: 70svh; padding: 24px 16px; }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .cards span { min-height: 112px; }
+}
+@media (prefers-reduced-motion: reduce) { .heading, .subheading, .cards span { animation: none; } }

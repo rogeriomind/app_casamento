@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from "react";
-import { colorValues } from "@/lib/validation";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { colorValues } from "@/lib/event-constants";
 import { requestJson } from "@/lib/client-api";
-import { AlbumSidebar } from "./album-sidebar";
 import { DashboardIcon } from "./dashboard-icon";
 import styles from "./event-settings.module.css";
 
@@ -19,7 +18,6 @@ type SettingsValues = {
   welcomeMessage: string;
 };
 type EventSettingsProps = {
-  user: { name: string };
   event: {
     id: string;
     type: string | null;
@@ -52,10 +50,10 @@ function initialValues(event: EventSettingsProps["event"]): SettingsValues {
   };
 }
 
-export function EventSettings({ event, user }: EventSettingsProps) {
+export function EventSettings({ event }: EventSettingsProps) {
   const [savedValues, setSavedValues] = useState(() => initialValues(event));
   const [values, setValues] = useState(savedValues);
-  const [savedCover, setSavedCover] = useState(event.coverUrl ?? "/images/login/party.lossless.webp");
+  const [savedCover, setSavedCover] = useState(event.coverUrl ?? "/images/optimized/party-480.webp");
   const [savedLogo, setSavedLogo] = useState(event.logoUrl);
   const [coverPreview, setCoverPreview] = useState(savedCover);
   const [logoPreview, setLogoPreview] = useState<string | null>(savedLogo);
@@ -162,9 +160,7 @@ export function EventSettings({ event, user }: EventSettingsProps) {
   const isRomantic = values.albumStyle === "ROMANTIC";
 
   return (
-    <div className={styles.shell} style={{ "--album-color": values.albumColor } as CSSProperties}>
-      <AlbumSidebar eventId={event.id} userName={user.name} active="settings" styles={styles} />
-
+    <div className={styles.shell} style={{ "--album-color": values.albumColor } as React.CSSProperties}>
       <main className={styles.main}>
         <header className={styles.header}>
           <div className={styles.headerCopy}>

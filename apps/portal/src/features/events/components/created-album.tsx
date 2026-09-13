@@ -4,7 +4,7 @@ import { LoginIcon } from "@/features/auth/components/login-icons";
 import { EventIcon } from "./event-icon";
 import styles from "./event-wizard.module.css";
 export function CreatedAlbum({ event }: { event: { id: string; name: string | null; albumColor: string; coverPath: string | null } }) {
-  const cover = event.coverPath ? "/api/eventos/" + event.id + "/capa" : "/images/login/party.lossless.webp";
+  const cover = event.coverPath ? "/api/eventos/" + event.id + "/capa" : "/images/optimized/party-480.webp";
   return <main className={styles.created}><Brand />
     <section className={styles.createdContent}>
       <div className={styles.createdText}><div className={styles.check}><EventIcon name="check" /></div>

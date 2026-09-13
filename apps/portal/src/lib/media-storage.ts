@@ -90,7 +90,7 @@ export function readCachedCaptureThumbnail(url: string) {
     return null;
   })();
   captureThumbnailReads.set(url, read);
-  void read.then((value) => { if (!value) captureThumbnailReads.delete(url); });
+  void read.finally(() => { if (captureThumbnailReads.get(url) === read) captureThumbnailReads.delete(url); });
   return read;
 }
 
@@ -105,8 +105,6 @@ export function cacheCaptureThumbnail(url: string, bytes: Uint8Array, mime: stri
     const filename = `${id}.${extension}`;
     await mkdir(/* turbopackIgnore: true */ captureThumbnailRoot, { recursive: true });
     await writeFile(path.join(/* turbopackIgnore: true */ captureThumbnailRoot, filename), bytes);
-    const cached: CachedCaptureThumbnail = { bytes: Buffer.from(bytes), mime: captureThumbnailMime[extension] };
-    captureThumbnailReads.set(url, Promise.resolve(cached));
   })();
   captureThumbnailWrites.set(url, write);
   return write.finally(() => captureThumbnailWrites.delete(url));
@@ -114,17 +112,18 @@ export function cacheCaptureThumbnail(url: string, bytes: Uint8Array, mime: stri
 
 const thumbnailMaxSize = 1200;
 const thumbnailJobs = new Map<string, Promise<Buffer>>();
+const captureVariantJobs = new Map<string, Promise<CachedCaptureThumbnail>>();
 
-export function thumbnailKey(storageKey: string) {
-  return storageKey.replace(/\.webp$/i, `.thumbnail-${thumbnailMaxSize}.webp`);
+export function thumbnailKey(storageKey: string, requestedWidth = thumbnailMaxSize) {
+  return storageKey.replace(/\.[^.]+$/i, `.thumbnail-${requestedWidth}.webp`);
 }
 
-export async function readMediaVariant(storageKey: string, variant: "original" | "miniatura", width: number | null, height: number | null) {
-  if (variant === "original" || (width !== null && height !== null && width <= thumbnailMaxSize && height <= thumbnailMaxSize)) {
+export async function readMediaVariant(storageKey: string, variant: "original" | "miniatura", width: number | null, height: number | null, requestedWidth = thumbnailMaxSize) {
+  if (variant === "original" || (width !== null && height !== null && width <= requestedWidth && height <= requestedWidth)) {
     return readFile(mediaPath(storageKey));
   }
 
-  const key = thumbnailKey(storageKey);
+  const key = thumbnailKey(storageKey, requestedWidth);
   try { return await readFile(mediaPath(key)); }
   catch {
     const running = thumbnailJobs.get(key);
@@ -132,7 +131,7 @@ export async function readMediaVariant(storageKey: string, variant: "original" |
     const job = (async () => {
       const original = await readFile(mediaPath(storageKey));
       const thumbnail = await sharp(original, { limitInputPixels: 40_000_000, failOn: "error" })
-        .resize({ width: thumbnailMaxSize, height: thumbnailMaxSize, fit: "inside", withoutEnlargement: true })
+        .resize({ width: requestedWidth, height: requestedWidth, fit: "inside", withoutEnlargement: true })
         .webp({ quality: 88, effort: 4 })
         .toBuffer();
       await writeFile(mediaPath(key), thumbnail);
@@ -141,5 +140,28 @@ export async function readMediaVariant(storageKey: string, variant: "original" |
     thumbnailJobs.set(key, job);
     try { return await job; }
     finally { thumbnailJobs.delete(key); }
+  }
+}
+
+export async function readCaptureThumbnailVariant(url: string, source: CachedCaptureThumbnail, requestedWidth: number) {
+  const key = `${captureThumbnailId(url)}-${requestedWidth}.webp`;
+  const target = path.join(/* turbopackIgnore: true */ captureThumbnailRoot, key);
+  try { return { bytes: await readFile(target), mime: "image/webp" as const }; }
+  catch {
+    const running = captureVariantJobs.get(key);
+    if (running) return running;
+    const job = (async () => {
+      const bytes = await sharp(source.bytes, { limitInputPixels: 40_000_000, failOn: "error" })
+        .rotate()
+        .resize({ width: requestedWidth, height: requestedWidth, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 84, effort: 4 })
+        .toBuffer();
+      await mkdir(/* turbopackIgnore: true */ captureThumbnailRoot, { recursive: true });
+      await writeFile(target, bytes);
+      return { bytes, mime: "image/webp" as const };
+    })();
+    captureVariantJobs.set(key, job);
+    try { return await job; }
+    finally { captureVariantJobs.delete(key); }
   }
 }

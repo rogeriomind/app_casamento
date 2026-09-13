@@ -1,11 +1,12 @@
+"use client";
+
 import Link from "next/link";
+import { useLinkStatus } from "next/link";
+import { usePathname } from "next/navigation";
 import { Brand } from "@/features/auth/components/brand";
 import { DashboardIcon } from "./dashboard-icon";
 import { ProfileLogout } from "./profile-logout";
-
-type SidebarStyles = Readonly<Record<string, string>>;
-
-type Section = "dashboard" | "photos" | "guests" | "settings";
+import styles from "./album-sidebar.module.css";
 
 const items = [
   { id: "dashboard", label: "Dashboard", icon: "album" as const, path: "" },
@@ -14,7 +15,13 @@ const items = [
   { id: "settings", label: "Configurações", icon: "settings" as const, path: "/configuracoes" },
 ] as const;
 
-export function AlbumSidebar({ eventId, userName, active, styles }: { eventId: string; userName: string; active: Section; styles: SidebarStyles }) {
+function PendingIndicator() {
+  const { pending } = useLinkStatus();
+  return pending ? <span className={styles.pending} aria-label="Carregando seção" /> : null;
+}
+
+export function AlbumSidebar({ eventId, userName }: { eventId: string; userName: string }) {
+  const pathname = usePathname();
   const firstName = userName.trim().split(/\s+/)[0] || "por aqui";
 
   return (
@@ -26,10 +33,11 @@ export function AlbumSidebar({ eventId, userName, active, styles }: { eventId: s
 
       <nav className={styles.navigation} aria-label="Seções do álbum">
         {items.map((item) => {
-          const isActive = item.id === active;
+          const href = `/eventos/${eventId}${item.path}`;
+          const isActive = item.path ? pathname.startsWith(href) : pathname === href;
           return (
-            <Link key={item.id} className={isActive ? styles.activeNav : styles.navItem} href={`/eventos/${eventId}${item.path}`} aria-current={isActive ? "page" : undefined} aria-label={item.label}>
-              <DashboardIcon name={item.icon} /><span>{item.label}</span>{isActive && <i aria-hidden="true" />}
+            <Link key={item.id} className={isActive ? styles.activeNav : styles.navItem} href={href} aria-current={isActive ? "page" : undefined} aria-label={item.label}>
+              <DashboardIcon name={item.icon} /><span>{item.label}</span><PendingIndicator />{isActive && <i aria-hidden="true" />}
             </Link>
           );
         })}

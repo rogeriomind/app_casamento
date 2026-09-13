@@ -4,9 +4,8 @@
   --line: #e5dfd5;
   --green: #2e654f;
   --lime: #c5ff41;
-  min-height: 100svh;
-  display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
+  min-height: 100%;
+  display: block;
   background: var(--paper);
   color: var(--ink);
   font-family: Inter, Arial, sans-serif;

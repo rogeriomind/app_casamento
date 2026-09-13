@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { DashboardIcon } from "./dashboard-icon";
 import styles from "./album-gallery.module.css";
 
 type Props = { eventId: string; photoId: string; initialFavorite: boolean };
 
 export function FavoriteButton({ eventId, photoId, initialFavorite }: Props) {
-  const router = useRouter();
   const [favorite, setFavorite] = useState(initialFavorite);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -28,7 +26,6 @@ export function FavoriteButton({ eventId, photoId, initialFavorite }: Props) {
         throw new Error(payload.error || "Não foi possível atualizar o favorito.");
       }
       setFavorite(next);
-      router.refresh();
     } catch (cause) {
       setError((cause as Error).message);
     } finally {

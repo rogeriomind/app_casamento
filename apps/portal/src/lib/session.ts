@@ -1,11 +1,12 @@
 import "server-only";
+import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "./auth";
 
-export async function getCurrentSession() {
+export const getCurrentSession = cache(async function getCurrentSession() {
   return auth.api.getSession({ headers: await headers() });
-}
+});
 
 export async function requireVerifiedUser() {
   const session = await getCurrentSession();

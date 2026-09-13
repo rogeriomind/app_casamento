@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 import { requestJson, jsonOptions } from "@/lib/client-api";
 import { GoogleMark, LoginIcon } from "@/features/auth/components/login-icons";
@@ -9,6 +10,7 @@ import styles from "./onboarding.module.css";
 type Errors = { name: string; email: string; password: string; form: string };
 
 export function SignupForm() {
+  const router = useRouter();
   const nameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -36,7 +38,7 @@ export function SignupForm() {
     setIsSubmitting(true);
     try {
       await requestJson("/api/cadastro", jsonOptions("POST", { name, email, password }));
-      window.location.assign("/cadastro/confirmar-email");
+      router.push("/cadastro/confirmar-email");
     } catch (error) {
       setErrors((current) => ({ ...current, form: (error as Error).message }));
       setIsSubmitting(false);

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlbumSidebar } from "./album-sidebar";
+import Form from "next/form";
 import { CaptureSync } from "./capture-sync";
 import { DashboardIcon } from "./dashboard-icon";
 import { normalizeParticipationName, type Participation } from "../lib/participations";
@@ -7,7 +7,6 @@ import styles from "./guests-dashboard.module.css";
 
 type Props = {
   event: { id: string; name: string | null; coverPath: string | null };
-  user: { name: string };
   metrics: {
     identifiedNames: number;
     mediaCount: number;
@@ -46,7 +45,6 @@ function dateLabel(value: string) {
 
 export function GuestsDashboard({
   event,
-  user,
   metrics,
   participations,
   filteredCount,
@@ -66,8 +64,6 @@ export function GuestsDashboard({
 
   return (
     <div className={styles.shell}>
-      <AlbumSidebar eventId={event.id} userName={user.name} active="guests" styles={styles} />
-
       <main className={styles.main}>
         <header className={styles.header}>
           <div className={styles.title}>
@@ -96,7 +92,7 @@ export function GuestsDashboard({
               <Link aria-current={filters.type === "videos" ? "page" : undefined} className={filters.type === "videos" ? styles.selectedTab : ""} href={paramsFor({ type: "videos", page: 1 })}>Com vídeos ({metrics.withVideos})</Link>
             </div>
 
-            <form className={styles.filters} method="get">
+            <Form className={styles.filters} action={`/eventos/${event.id}/convidados`}>
               <label className={styles.search}>
                 <DashboardIcon name="search" />
                 <span className={styles.srOnly}>Buscar</span>
@@ -122,7 +118,7 @@ export function GuestsDashboard({
               {(filters.search || filters.type !== "todos" || filters.order !== "recentes") && (
                 <Link className={styles.clear} href={`/eventos/${event.id}/convidados`}>Limpar</Link>
               )}
-            </form>
+            </Form>
 
             <div className={styles.directoryHeader}>
               <div>

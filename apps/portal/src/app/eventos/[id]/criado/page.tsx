@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { EventState } from "@/generated/prisma/client";
-import { CreatedAlbum } from "@/features/events/components/event-wizard";
+import { CreatedAlbum } from "@/features/events/components/created-album";
 import { prisma } from "@/lib/prisma";
 import { requireVerifiedUser } from "@/lib/session";
 

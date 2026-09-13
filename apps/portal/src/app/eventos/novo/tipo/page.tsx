@@ -1,6 +1,6 @@
 import { getOrCreateDraftForUser } from "@/lib/events";
 import { requireVerifiedUser } from "@/lib/session";
-import { TypeStep } from "@/features/events/components/event-wizard";
+import { TypeStep } from "@/features/events/components/type-step";
 
 export default async function EventTypePage() {
   const user = await requireVerifiedUser();

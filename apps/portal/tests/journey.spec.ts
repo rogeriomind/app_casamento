@@ -196,10 +196,19 @@ test("jornada real: código colado, voltar, recarregar, capa, cor e login", asyn
   await expect(page.getByRole("button", { name: "Remover dos favoritos" }).first()).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("link", { name: /Favoritos \(1\)/ }).click();
   await expect(page.getByAltText("Pessoas celebrando ao ar livre no fim de tarde")).toBeVisible();
+  let galleryDocumentRequests = 0;
+  const countGalleryDocuments = (request: import("@playwright/test").Request) => {
+    if (request.resourceType() === "document") galleryDocumentRequests += 1;
+  };
+  page.on("request", countGalleryDocuments);
   await page.getByRole("link", { name: /Abrir foto/ }).click();
   await expect(page.getByRole("dialog", { name: "Mídia ampliada" })).toBeVisible();
+  await expect(page).toHaveURL(/foto=/);
+  expect(galleryDocumentRequests).toBe(0);
   await page.getByRole("button", { name: "Fechar detalhe" }).click();
   await expect(page.getByRole("dialog", { name: "Mídia ampliada" })).not.toBeVisible();
+  await expect(page).not.toHaveURL(/foto=/);
+  page.off("request", countGalleryDocuments);
   const mediaUrl = `/api/eventos/${eventId}/fotos/${photo.id}`;
   const mediaResponse = await page.request.get(mediaUrl);
   expect(mediaResponse.status()).toBe(200);

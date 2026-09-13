@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { LoginIcon } from "@/features/auth/components/login-icons";
 import { WizardFrame } from "./wizard-frame";
 import { EventIcon } from "./event-icon";
@@ -10,6 +11,7 @@ const types = [
   ["GATHERING", "Confraternização", "toast"], ["CORPORATE", "Corporativo", "briefcase"], ["OTHER", "Outro", "sparkle"],
 ] as const;
 export function TypeStep({ draft }: { draft: Draft }) {
+  const router = useRouter();
   const form = useDraft(draft.id, "type", { type: draft.type });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -17,7 +19,7 @@ export function TypeStep({ draft }: { draft: Draft }) {
     if (busy) return;
     if (next && !form.value.type) { setError("Escolha o tipo de evento para continuar."); return; }
     setBusy(true); setError("");
-    try { await form.flush(); window.location.assign(next ? "/eventos/novo/informacoes" : "/cadastro/concluido"); }
+    try { await form.flush(); router.push(next ? "/eventos/novo/informacoes" : "/cadastro/concluido"); }
     catch (e) { setError((e as Error).message); setBusy(false); }
   }
   return <WizardFrame step={1}><section className={styles.content}>

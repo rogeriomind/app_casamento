@@ -1,0 +1,13 @@
+.page { min-height: 100svh; max-width: 1200px; margin: 0 auto; padding: 40px 60px 48px; }
+.page header { display: flex; justify-content: space-between; }
+.page header span:first-child { width: 165px; height: 42px; }
+.page header span:last-child { width: 310px; height: 18px; }
+.page section { margin-top: 68px; }
+.page span { display: block; border-radius: 10px; background: linear-gradient(100deg, #e9ebef 25%, #f8f9fb 45%, #e9ebef 65%); background-size: 220% 100%; animation: shimmer 1.2s ease-in-out infinite; }
+.title { width: min(560px, 80%); height: 60px; }
+.copy { width: min(680px, 92%); height: 24px; margin-top: 18px; }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 34px; }
+.cards span { min-height: 190px; }
+@keyframes shimmer { to { background-position-x: -220%; } }
+@media (max-width: 700px) { .page { padding: 24px 18px; } .page header span:last-child { width: 35%; } .cards { grid-template-columns: repeat(2, 1fr); gap: 10px; } .cards span { min-height: 132px; } }
+@media (prefers-reduced-motion: reduce) { .page span { animation: none; } }

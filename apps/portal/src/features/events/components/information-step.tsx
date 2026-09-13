@@ -1,5 +1,6 @@
 "use client";
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { LoginIcon } from "@/features/auth/components/login-icons";
 import { eventInformationSchema } from "@/lib/validation";
 import { WizardFrame } from "./wizard-frame";
@@ -7,6 +8,7 @@ import { EventIcon } from "./event-icon";
 import { useDraft, type Draft } from "./use-draft";
 import styles from "./event-wizard.module.css";
 export function InformationStep({ draft }: { draft: Draft }) {
+  const router = useRouter();
   const form = useDraft(draft.id, "information", { name: draft.name ?? "", eventDate: draft.eventDate?.slice(0, 10) ?? "", description: draft.description ?? "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -17,7 +19,7 @@ export function InformationStep({ draft }: { draft: Draft }) {
       if (!result.success) { setError(result.error.issues[0].message); document.getElementById("event-" + String(result.error.issues[0].path[0]))?.focus(); return; }
     }
     setBusy(true);
-    try { await form.flush(); window.location.assign(next ? "/eventos/novo/personalizacao" : "/eventos/novo/tipo"); }
+    try { await form.flush(); router.push(next ? "/eventos/novo/personalizacao" : "/eventos/novo/tipo"); }
     catch (e) { setError((e as Error).message); setBusy(false); }
   }
   return <WizardFrame step={2}><form className={styles.stepForm} onSubmit={(event) => navigate(true, event)} noValidate>

@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRef, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 import { requestJson, jsonOptions } from "@/lib/client-api";
@@ -8,6 +9,7 @@ import styles from "./onboarding.module.css";
 
 const normalized = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, "");
 export function VerificationForm({ initialEmail }: { initialEmail: string }) {
+  const router = useRouter();
   const inputs = useRef<Array<HTMLInputElement | null>>([]);
   const [email, setEmail] = useState(initialEmail);
   const [code, setCode] = useState<string[]>(Array(6).fill(""));
@@ -48,7 +50,7 @@ export function VerificationForm({ initialEmail }: { initialEmail: string }) {
       if (result.error) throw new Error("Código inválido ou expirado. Reenvie o código e tente novamente.");
       // Confirmation already succeeded even if clearing the temporary cookie fails.
       await fetch("/api/cadastro/pendente", { method: "DELETE" }).catch(() => {});
-      window.location.assign("/cadastro/concluido");
+      router.replace("/cadastro/concluido");
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
   async function resend() {

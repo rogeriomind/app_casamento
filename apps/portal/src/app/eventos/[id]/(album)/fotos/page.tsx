@@ -2,6 +2,8 @@ import { notFound, redirect } from "next/navigation";
 import { EventState, MediaType, type Prisma } from "@/generated/prisma/client";
 import { AlbumGallery, galleryPageSize } from "@/features/dashboard/components/album-gallery";
 import { matchingAuthorVariants } from "@/features/dashboard/lib/participations";
+import { createMediaGrant } from "@/lib/media-grant";
+import { getOwnedEvent } from "@/lib/owned-event";
 import { prisma } from "@/lib/prisma";
 import { requireVerifiedUser } from "@/lib/session";
 
@@ -90,10 +92,7 @@ export default async function EventPhotosPage({ params, searchParams }: PageProp
   const rawTag = query.tag?.trim().slice(0, 64) || null;
   const author = query.autor?.trim().slice(0, 120) || null;
 
-  const event = await prisma.event.findFirst({
-    where: { id, ownerId: user.id },
-    select: { id: true, name: true, state: true, albumColor: true, coverPath: true },
-  });
+  const event = await getOwnedEvent(id, user.id);
   if (!event) notFound();
   if (event.state !== EventState.CREATED) redirect("/eventos/novo/personalizacao");
 
@@ -161,23 +160,21 @@ export default async function EventPhotosPage({ params, searchParams }: PageProp
   const filteredTotal = isUnsupportedUploads ? 0 : usesDefaultFilter ? albumTotal : await prisma.photo.count({ where: filter });
   const totalPages = Math.max(Math.ceil(filteredTotal / galleryPageSize), 1);
   const page = Math.min(requestedPage, totalPages);
-  const [rows, selectedRow] = await Promise.all([
-    isUnsupportedUploads
-      ? Promise.resolve([])
-      : prisma.photo.findMany({ where: filter, orderBy: ordering, skip: (page - 1) * galleryPageSize, take: galleryPageSize, select: detailSelect }),
-    photoId && !isUnsupportedUploads
-      ? prisma.photo.findFirst({ where: { ...filter, id: photoId }, select: detailSelect })
-      : null,
-  ]);
-  const photos = rows.map(({ favorites, ...photo }) => ({ ...photo, isFavorite: favorites.length > 0 }));
+  const rows = isUnsupportedUploads
+    ? []
+    : await prisma.photo.findMany({ where: filter, orderBy: ordering, skip: (page - 1) * galleryPageSize, take: galleryPageSize, select: detailSelect });
+  const selectedRow = photoId && !isUnsupportedUploads
+    ? rows.find((row) => row.id === photoId) ?? await prisma.photo.findFirst({ where: { ...filter, id: photoId }, select: detailSelect })
+    : null;
+  const serializePhoto = ({ favorites, ...photo }: (typeof rows)[number]) => ({ ...photo, createdAt: photo.createdAt.toISOString(), isFavorite: favorites.length > 0, grant: createMediaGrant(event.id, photo.id) });
+  const photos = rows.map(serializePhoto);
   const selectedPhoto = selectedRow
-    ? (({ favorites, ...photo }) => ({ ...photo, isFavorite: favorites.length > 0 }))(selectedRow)
+    ? serializePhoto(selectedRow)
     : null;
 
   return (
     <AlbumGallery
       event={event}
-      user={{ name: user.name }}
       photos={photos}
       total={filteredTotal}
       albumTotal={albumTotal}

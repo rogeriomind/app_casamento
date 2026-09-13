@@ -1,9 +1,9 @@
 import { z } from "zod";
-export const eventTypes = ["WEDDING", "BIRTHDAY", "GRADUATION", "GATHERING", "CORPORATE", "OTHER"] as const;
+import { albumStyles, colorValues, eventTypes } from "./event-constants";
+
+export { albumStyles, colorValues, eventTypes } from "./event-constants";
 export const eventTypeSchema = z.enum(eventTypes);
-export const colorValues = ["#17345f", "#337263", "#e46662", "#d7bfaa", "#958bd1", "#1d1d1d"] as const;
 export const albumColorSchema = z.enum(colorValues);
-export const albumStyles = ["MINIMALIST", "ROMANTIC", "MODERN", "CLASSIC"] as const;
 export const albumStyleSchema = z.enum(albumStyles);
 export function isValidDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith("0000")) return false;

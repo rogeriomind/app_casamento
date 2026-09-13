@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getDraftForUser } from "@/lib/events";
 import { requireVerifiedUser } from "@/lib/session";
-import { PersonalizationStep } from "@/features/events/components/event-wizard";
+import { PersonalizationStep } from "@/features/events/components/personalization-step";
 
 export default async function EventPersonalizationPage() {
   const user = await requireVerifiedUser(); const draft = await getDraftForUser(user.id);
