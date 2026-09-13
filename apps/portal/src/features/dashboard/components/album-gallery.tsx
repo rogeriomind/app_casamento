@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { CaptureSync } from "./capture-sync";
 import { DashboardIcon } from "./dashboard-icon";
 import { FavoriteButton } from "./favorite-button";
+import { FavoriteCount } from "./favorite-count";
 import { GalleryToolbar } from "./gallery-toolbar";
 import { GalleryThumbnail } from "./gallery-thumbnail";
 import { GalleryModalProvider, GalleryOpenLink } from "./gallery-modal-controller";
@@ -129,7 +130,7 @@ export function AlbumGallery(props: GalleryProps) {
           <nav className={styles.scopeTabs} aria-label="Coleções de fotos">
             <Link aria-current={scope === "todas" ? "page" : undefined} className={scope === "todas" ? styles.selectedScope : ""} href={paramsFor({ page: 1, photo: null, scope: "todas" })}><DashboardIcon name="album" />Todas <span>({albumTotal})</span></Link>
             <Link aria-current={scope === "envios" ? "page" : undefined} className={scope === "envios" ? styles.selectedScope : ""} href={paramsFor({ page: 1, photo: null, scope: "envios" })}><DashboardIcon name="send" />Meus envios</Link>
-            <Link aria-current={scope === "favoritos" ? "page" : undefined} className={scope === "favoritos" ? styles.selectedScope : ""} href={paramsFor({ page: 1, photo: null, scope: "favoritos" })}><DashboardIcon name="heart" />Favoritos <span>({favoriteTotal})</span></Link>
+            <Link aria-current={scope === "favoritos" ? "page" : undefined} className={scope === "favoritos" ? styles.selectedScope : ""} href={paramsFor({ page: 1, photo: null, scope: "favoritos" })}><DashboardIcon name="heart" />Favoritos <FavoriteCount eventId={event.id} initialTotal={favoriteTotal} /></Link>
           </nav>
 
           <GalleryToolbar action={route} search={search} type={type} period={period} tag={tag} order={order} preserved={{ scope, view, author }} />
