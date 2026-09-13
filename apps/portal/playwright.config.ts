@@ -6,7 +6,7 @@ if (!database || database === process.env.DATABASE_URL || !new URL(database).pat
   throw new Error("Configure TEST_DATABASE_URL com um banco separado terminado em _test.");
 }
 export default defineConfig({
-  testDir: "./tests", fullyParallel: false, workers: 1, reporter: "list",
+  testDir: "./tests", testIgnore: "**/*.unit.test.ts", fullyParallel: false, workers: 1, reporter: "list",
   timeout: 60000, expect: { timeout: 10000 }, outputDir: "artifacts/test-results",
   use: { baseURL: "http://127.0.0.1:3001", browserName: "chromium", viewport: { width: 1584, height: 993 }, trace: "retain-on-failure" },
   webServer: {
