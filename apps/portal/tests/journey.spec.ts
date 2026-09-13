@@ -113,6 +113,7 @@ test("jornada real: código colado, voltar, recarregar, capa, cor e login", asyn
   await expect(page).toHaveURL(/informacoes$/);
   await expect(page.getByLabel("Descrição", { exact: true })).toHaveValue("Um dia especial para guardar.");
   await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await expect(page).toHaveURL(/eventos\/novo\/personalizacao$/);
   await page.reload();
   await expect(page.getByLabel("Selecionar cor #e46662")).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByAltText("Prévia da capa")).toBeVisible();
