@@ -58,7 +58,14 @@ COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-app_casamento_portal}"
 APP_PORT="${APP_PORT:-3011}"
 case "$APP_PORT" in *[!0-9]*|"") echo "APP_PORT invalida." >&2; exit 1 ;; esac
 export COMPOSE_PROJECT_NAME APP_PORT GIT_COMMIT="$COMMIT_SHA"
-compose_cmd() { docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file "$PORTAL_APP_PATH/.env" "$@"; }
+compose_cmd() {
+  docker compose \
+    --project-name "$COMPOSE_PROJECT_NAME" \
+    --project-directory "$PORTAL_APP_PATH" \
+    --env-file "$PORTAL_APP_PATH/.env" \
+    -f "$PORTAL_APP_PATH/docker-compose.yml" \
+    "$@"
+}
 
 if command -v ss >/dev/null 2>&1 && ss -lnt | awk '{print $4}' | grep -Eq ":${APP_PORT}$"; then
   if ! docker ps --format '{{.Names}} {{.Ports}}' | grep -q "app-casamento-portal.*127.0.0.1:${APP_PORT}->3000"; then

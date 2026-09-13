@@ -6,5 +6,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 User=deploy
+RuntimeDirectory=app-casamento-portal
+RuntimeDirectoryMode=0750
 WorkingDirectory=/opt/apps/app_casamento_portal
-ExecStart=/usr/bin/flock -n /run/app-casamento-capture-sync.lock /usr/bin/docker compose --project-name app_casamento_portal --env-file /opt/apps/app_casamento_portal/.env run --rm --no-deps app npm run capture:sync-all
+ExecStart=/usr/bin/flock -n /run/app-casamento-portal/capture-sync.lock /usr/bin/docker compose --project-name app_casamento_portal --project-directory /opt/apps/app_casamento_portal --env-file /opt/apps/app_casamento_portal/.env -f /opt/apps/app_casamento_portal/docker-compose.yml run --rm --no-deps app npm run capture:sync-all
