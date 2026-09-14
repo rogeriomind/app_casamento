@@ -156,6 +156,13 @@ jobs:
           printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/vps_key
           test -s ~/.ssh/vps_key
           chmod 600 ~/.ssh/vps_key
+          cat > ~/.ssh/config <<'EOF'
+          Host *
+            ServerAliveInterval 15
+            ServerAliveCountMax 40
+            TCPKeepAlive yes
+          EOF
+          chmod 600 ~/.ssh/config
           ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
       - name: Prepare release packages
         run: |

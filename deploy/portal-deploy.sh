@@ -113,10 +113,10 @@ compose_cmd up -d --build --remove-orphans
 install -d -m 755 "$PORTAL_APP_PATH/.deploy-state"
 printf '%s\n' "$COMMIT_SHA" > "$PORTAL_APP_PATH/.deploy-state/last-commit"
 printf '%s\n' "$timestamp" > "$PORTAL_APP_PATH/.deploy-state/last-deploy-at"
-for attempt in $(seq 1 30); do
+for attempt in $(seq 1 60); do
   health_body="$(curl -fsS "http://127.0.0.1:${APP_PORT}/api/health" 2>/dev/null || true)"
   if printf '%s' "$health_body" | grep -Eq "\"commit\"[[:space:]]*:[[:space:]]*\"${COMMIT_SHA}\""; then break; fi
-  if [ "$attempt" -eq 30 ]; then compose_cmd logs --tail=120 app >&2 || true; exit 1; fi
+  if [ "$attempt" -eq 60 ]; then compose_cmd logs --tail=120 app >&2 || true; exit 1; fi
   sleep 3
 done
 find "$PORTAL_APP_PATH/.releases" -maxdepth 1 -type f -name '*.tar.gz' | sort -r | tail -n "+$((KEEP_RELEASES + 1))" | xargs -r rm -f
