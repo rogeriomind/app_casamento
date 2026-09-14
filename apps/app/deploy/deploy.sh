@@ -281,13 +281,13 @@ printf '%s\n' "$timestamp" > "$APP_PATH/.deploy-state/last-deploy-at"
 
 echo "Aguardando healthcheck HTTP..."
 health_url="http://127.0.0.1:$APP_PORT/api/health"
-for attempt in $(seq 1 30); do
+for attempt in $(seq 1 60); do
   if curl -fsS "$health_url" >/dev/null; then
     echo "Healthcheck OK: $health_url"
     break
   fi
 
-  if [ "$attempt" -eq 30 ]; then
+  if [ "$attempt" -eq 60 ]; then
     echo "Healthcheck falhou; ultimos logs da aplicacao:" >&2
     compose_cmd logs --tail=120 app >&2 || true
     exit 1
