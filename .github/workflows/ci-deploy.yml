@@ -1,0 +1,205 @@
+name: CI and deploy app_casamento
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-app-casamento
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "24"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  app-validate:
+    name: Validate capture app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/app
+    env:
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/album_casamento?schema=public"
+      APP_BASE_URL: "https://digax.productpulse.com.br"
+      ADMIN_API_KEY: "ci-admin-key"
+      CLIENT_HASH_SECRET: "ci-client-hash-secret"
+      BUNNY_STORAGE_ENDPOINT: "https://storage.example.com/app-casamento"
+      BUNNY_STORAGE_PASSWORD: "ci-storage-password"
+      BUNNY_PUBLIC_BASE_URL: "https://cdn.example.com"
+      BUNNY_STREAM_LIBRARY_ID: "123456"
+      BUNNY_STREAM_API_KEY: "ci-stream-api-key"
+      BUNNY_STREAM_PULL_ZONE_HOSTNAME: "vz-example.b-cdn.net"
+      BUNNY_STREAM_WEBHOOK_SECRET: "ci-stream-webhook-secret"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/app/package-lock.json
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: bash -n deploy/deploy.sh scripts/bootstrap-contabo.sh scripts/check-vps-port.sh
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run typecheck
+      - run: npm run build
+
+  portal-validate:
+    name: Validate portal
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/portal
+    env:
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/portal_casamento?schema=public"
+      TEST_DATABASE_URL: "postgresql://ci:ci@localhost:5432/portal_casamento_test?schema=public"
+      BETTER_AUTH_URL: "http://127.0.0.1:3000"
+      BETTER_AUTH_SECRET: "ci-better-auth-secret"
+      MOCK_EMAIL_CODE: "A1B2C3"
+      CAPTURE_API_BASE_URL: "https://digax.productpulse.com.br"
+      CAPTURE_ADMIN_API_KEY: "ci-capture-key"
+      SMTP_HOST: "localhost"
+      SMTP_PORT: "2525"
+      SMTP_FROM: "ci@example.com"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/portal/package-lock.json
+      - run: npm ci
+      - run: npm run db:generate
+      - run: bash -n ../../deploy/portal-deploy.sh ../../deploy/verify-production.sh
+      - run: npm run test
+      - run: npm run typecheck
+      - run: npm run build
+
+  portal-e2e:
+    name: Portal browser tests
+    needs: portal-validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/portal
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: portal_casamento_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d portal_casamento_test"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/portal_casamento?schema=public"
+      TEST_DATABASE_URL: "postgresql://ci:ci@localhost:5432/portal_casamento_test?schema=public"
+      BETTER_AUTH_URL: "http://127.0.0.1:3001"
+      BETTER_AUTH_SECRET: "ci-better-auth-secret"
+      MOCK_EMAIL_CODE: "A1B2C3"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/portal/package-lock.json
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+  deploy:
+    name: Deploy capture and portal
+    needs: [app-validate, portal-validate, portal-e2e]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+      APP_PATH: ${{ secrets.APP_PATH }}
+      PORTAL_APP_PATH: ${{ secrets.PORTAL_APP_PATH }}
+      COMMIT_SHA: ${{ github.sha }}
+      APP_RELEASE_TARBALL: /tmp/app_casamento_release.tar.gz
+      PORTAL_RELEASE_TARBALL: /tmp/app_casamento_portal_release.tar.gz
+      BUNNY_STREAM_ENV_FILE: /tmp/app_casamento_bunny_stream_${{ github.run_id }}_${{ github.run_attempt }}.env
+      PORTAL_ENV_FILE: /tmp/app_casamento_portal_smtp_${{ github.run_id }}_${{ github.run_attempt }}.env
+      BUNNY_STREAM_LIBRARY_ID: ${{ secrets.BUNNY_STREAM_LIBRARY_ID }}
+      BUNNY_STREAM_API_KEY: ${{ secrets.BUNNY_STREAM_API_KEY }}
+      BUNNY_STREAM_PULL_ZONE_HOSTNAME: ${{ secrets.BUNNY_STREAM_PULL_ZONE_HOSTNAME }}
+      BUNNY_STREAM_WEBHOOK_SECRET: ${{ secrets.BUNNY_STREAM_WEBHOOK_SECRET }}
+      PORTAL_SMTP_HOST: ${{ secrets.PORTAL_SMTP_HOST }}
+      PORTAL_SMTP_PORT: ${{ secrets.PORTAL_SMTP_PORT }}
+      PORTAL_SMTP_SECURE: ${{ secrets.PORTAL_SMTP_SECURE || 'false' }}
+      PORTAL_SMTP_USER: ${{ secrets.PORTAL_SMTP_USER }}
+      PORTAL_SMTP_PASSWORD: ${{ secrets.PORTAL_SMTP_PASSWORD }}
+      PORTAL_SMTP_FROM: ${{ secrets.PORTAL_SMTP_FROM }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?Missing VPS_HOST}"
+          : "${VPS_USER:?Missing VPS_USER}"
+          : "${APP_PATH:?Missing APP_PATH}"
+          : "${PORTAL_APP_PATH:?Missing PORTAL_APP_PATH}"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/vps_key
+          test -s ~/.ssh/vps_key
+          chmod 600 ~/.ssh/vps_key
+          cat > ~/.ssh/config <<'EOF'
+          Host *
+            ServerAliveInterval 15
+            ServerAliveCountMax 40
+            TCPKeepAlive yes
+          EOF
+          chmod 600 ~/.ssh/config
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+      - name: Prepare release packages
+        run: |
+          set -euo pipefail
+          tar --exclude='.git' --exclude='.env' --exclude='node_modules' --exclude='.next' --exclude='artifacts' --exclude='data' -czf "$RUNNER_TEMP/app_casamento_release.tar.gz" -C apps/app .
+          tar --exclude='.git' --exclude='.env' --exclude='node_modules' --exclude='.next' --exclude='artifacts' --exclude='data' -czf "$RUNNER_TEMP/app_casamento_portal_release.tar.gz" -C apps/portal .
+      - name: Prepare runtime secrets
+        run: |
+          set -euo pipefail
+          for name in BUNNY_STREAM_LIBRARY_ID BUNNY_STREAM_API_KEY BUNNY_STREAM_PULL_ZONE_HOSTNAME BUNNY_STREAM_WEBHOOK_SECRET; do
+            test -n "${!name:-}" || { echo "Missing $name" >&2; exit 1; }
+          done
+          for name in PORTAL_SMTP_HOST PORTAL_SMTP_PORT PORTAL_SMTP_USER PORTAL_SMTP_PASSWORD PORTAL_SMTP_FROM; do
+            test -n "${!name:-}" || { echo "Missing $name" >&2; exit 1; }
+          done
+          [[ "$BUNNY_STREAM_LIBRARY_ID" =~ ^[0-9]+$ ]]
+          umask 077
+          printf 'BUNNY_STREAM_LIBRARY_ID=%s\nBUNNY_STREAM_API_KEY=%s\nBUNNY_STREAM_PULL_ZONE_HOSTNAME=%s\nBUNNY_STREAM_WEBHOOK_SECRET=%s\n' "$BUNNY_STREAM_LIBRARY_ID" "$BUNNY_STREAM_API_KEY" "$BUNNY_STREAM_PULL_ZONE_HOSTNAME" "$BUNNY_STREAM_WEBHOOK_SECRET" > "$RUNNER_TEMP/bunny-stream.env"
+          printf 'SMTP_HOST=%s\nSMTP_PORT=%s\nSMTP_SECURE=%s\nSMTP_USER=%s\nSMTP_PASSWORD=%s\nSMTP_FROM=%s\n' "$PORTAL_SMTP_HOST" "$PORTAL_SMTP_PORT" "$PORTAL_SMTP_SECURE" "$PORTAL_SMTP_USER" "$PORTAL_SMTP_PASSWORD" "$PORTAL_SMTP_FROM" > "$RUNNER_TEMP/portal-smtp.env"
+      - name: Upload releases and secrets
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/vps_key -P "$VPS_PORT" "$RUNNER_TEMP/app_casamento_release.tar.gz" "$VPS_USER@$VPS_HOST:$APP_RELEASE_TARBALL"
+          scp -i ~/.ssh/vps_key -P "$VPS_PORT" "$RUNNER_TEMP/app_casamento_portal_release.tar.gz" "$VPS_USER@$VPS_HOST:$PORTAL_RELEASE_TARBALL"
+          scp -i ~/.ssh/vps_key -P "$VPS_PORT" "$RUNNER_TEMP/bunny-stream.env" "$VPS_USER@$VPS_HOST:$BUNNY_STREAM_ENV_FILE"
+          scp -i ~/.ssh/vps_key -P "$VPS_PORT" "$RUNNER_TEMP/portal-smtp.env" "$VPS_USER@$VPS_HOST:$PORTAL_ENV_FILE"
+      - name: Deploy capture first
+        run: |
+          ssh -i ~/.ssh/vps_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "APP_PATH='$APP_PATH' RELEASE_TARBALL='$APP_RELEASE_TARBALL' BUNNY_STREAM_ENV_FILE='$BUNNY_STREAM_ENV_FILE' COMMIT_SHA='$COMMIT_SHA' RUN_REMOTE_NODE_PREFLIGHT=0 bash -s" < apps/app/deploy/deploy.sh
+      - name: Deploy portal second
+        run: |
+          ssh -i ~/.ssh/vps_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "PORTAL_APP_PATH='$PORTAL_APP_PATH' RELEASE_TARBALL='$PORTAL_RELEASE_TARBALL' PORTAL_ENV_FILE='$PORTAL_ENV_FILE' COMMIT_SHA='$COMMIT_SHA' bash -s" < deploy/portal-deploy.sh
+      - name: Verify both health endpoints
+        run: |
+          ssh -i ~/.ssh/vps_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "APP_PATH='$APP_PATH' PORTAL_APP_PATH='$PORTAL_APP_PATH' COMMIT_SHA='$COMMIT_SHA' bash -s" < deploy/verify-production.sh
+      - name: Cleanup temporary secrets
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/bunny-stream.env" "$RUNNER_TEMP/portal-smtp.env"
+          ssh -i ~/.ssh/vps_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "rm -f -- '$BUNNY_STREAM_ENV_FILE' '$PORTAL_ENV_FILE'" || true

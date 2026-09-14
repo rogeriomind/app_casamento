@@ -1,0 +1,21 @@
+{
+  "mode": "built-in image_gen; 3 parallel calls; no retries",
+  "reference": "Imagem de referência fornecida pelo usuário (1584 x 993).",
+  "images": [
+    {
+      "name": "wedding-table",
+      "path": "public/images/login/dinner.png",
+      "prompt": "Use case: photorealistic-natural. Asset type: standalone website photograph. Input image 1 is a composition and color reference only, a login-page design containing three separate framed photos. Recreate ONLY the photograph in the TOP frame: an elegant outdoor wedding reception table at evening, in a straight upright edge-to-edge portrait image with 4:5 aspect ratio. Delicate white and soft peach roses with tiny white flowers and fresh green leaves fill the lower left foreground on a cream tablecloth; tall clear champagne glasses and table setting are at the lower right. Warm glowing string bulbs arc across the top half with shallow depth of field and dark lush green foliage behind. Real wedding editorial photography, warm amber highlights, rich dark olive shadows, romantic intimate natural atmosphere. Match the top reference photograph's composition, photographic texture and colors closely. The generated output is the photograph itself, completely filling the canvas. NO Polaroid border, NO white frame, NO rotation, NO collage, NO text, NO lime circle, NO illustration, NO graphic marks, NO page layout or UI, NO watermark."
+    },
+    {
+      "name": "confetti-crowd",
+      "path": "public/images/login/party.png",
+      "prompt": "Use case: photorealistic-natural. Asset type: standalone website photograph. Input image 1 is a composition and color reference only, a login-page design containing three separate framed photos. Recreate ONLY the photograph in the MIDDLE frame: a candid outdoor celebration crowd with raised arms and hundreds of small confetti pieces flying overhead, captured at a warm peach and amber sunset. A low bright sun glows slightly left of center behind guests; dark moody backlit silhouettes fill the lower half, with a raised hand reaching up near the right center and another at the far right. Open warm peach sky fills the upper half with airborne confetti. Real editorial party photography, warm sunset backlight, rich natural deep shadows, joyful energetic moment, slight grain and atmospheric depth. Straight upright edge-to-edge square 1:1 image. Match the middle reference photograph's composition, photographic texture and colors closely. The generated output is the photograph itself, completely filling the canvas. NO Polaroid border, NO white frame, NO rotation, NO collage, NO text, NO lime circle, NO illustration, NO graphic marks, NO page layout or UI, NO watermark."
+    },
+    {
+      "name": "phone-recording",
+      "path": "public/images/login/phone.png",
+      "prompt": "Use case: photorealistic-natural. Asset type: standalone website photograph. Input image 1 is a composition and color reference only, a login-page design containing three separate framed photos. Recreate ONLY the photograph in the BOTTOM small frame: close-up of two natural human hands holding an upright black smartphone in portrait orientation in the center foreground, recording a celebration. The phone screen visibly shows a festive crowd and flying confetti. Behind the phone, out-of-focus happy party guests and warm string bulbs create soft amber and cream bokeh in a dark intimate indoor celebration setting. Real candid editorial photography, warm brown and amber colors, shallow depth of field, realistic skin and phone details. Hands rise from lower edge, phone occupies central middle, upright close composition with 4:5 portrait aspect ratio. Match the bottom reference photograph's composition, photographic texture and colors closely. The generated output is the photograph itself, completely filling the canvas. NO Polaroid border, NO white frame, NO rotation, NO collage, NO surrounding text, NO lime circle, NO illustration, NO graphic marks, NO page layout or login UI, NO watermark."
+    }
+  ]
+}

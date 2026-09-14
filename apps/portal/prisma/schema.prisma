@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum EventType {
+  WEDDING
+  BIRTHDAY
+  GRADUATION
+  GATHERING
+  CORPORATE
+  OTHER
+}
+
+enum EventState {
+  DRAFT
+  CREATED
+}
+
+enum AlbumStyle {
+  MINIMALIST
+  ROMANTIC
+  MODERN
+  CLASSIC
+}
+
+enum PhotoOrigin {
+  LOCAL
+  CAPTURE
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum CaptureSyncStatus {
+  IDLE
+  SYNCING
+  READY
+  FAILED
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  events        Event[]
+  photoFavorites PhotoFavorite[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model Event {
+  id           String     @id @default(cuid())
+  ownerId      String
+  owner        User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  type         EventType?
+  name         String?
+  eventDate    DateTime?
+  description  String?    @db.VarChar(300)
+  albumColor   String     @default("#17345f")
+  coverPath    String?
+  coverMime    String?
+  displayNames String?    @db.VarChar(120)
+  eventTime    String?    @db.VarChar(5)
+  venue        String?    @db.VarChar(120)
+  albumStyle   AlbumStyle @default(MINIMALIST)
+  welcomeMessage String?  @db.VarChar(300)
+  logoPath     String?
+  logoMime     String?
+  state        EventState @default(DRAFT)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  photos       Photo[]
+  captureIntegration CaptureIntegration?
+
+  @@index([ownerId, state])
+}
+
+model Photo {
+  id               String      @id @default(cuid())
+  eventId          String
+  event            Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  origin           PhotoOrigin @default(LOCAL)
+  mediaType        MediaType   @default(IMAGE)
+  storageKey       String?
+  originalStorageKey String?
+  originalMime       String?
+  mime             String      @default("image/webp")
+  width            Int?
+  height           Int?
+  altText          String
+  collection       String?
+  sourceKey        String
+  sourceUrl        String?
+  remoteId         String?
+  remoteImageUrl   String?
+  remoteThumbnailUrl String?
+  remoteEmbedUrl   String?
+  remotePlaybackUrl String?
+  authorName       String?
+  sourceTags       String[]    @default([])
+  tags             String[]    @default([])
+  likeCount        Int         @default(0)
+  durationSeconds  Int?
+  isVisible        Boolean     @default(true)
+  missingSyncCount Int         @default(0)
+  createdAt        DateTime    @default(now())
+  favorites        PhotoFavorite[]
+
+  @@unique([eventId, sourceKey])
+  @@index([eventId, isVisible, createdAt])
+  @@index([eventId, origin, remoteId])
+}
+
+model PhotoFavorite {
+  userId    String
+  photoId   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photo     Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@id([userId, photoId])
+  @@index([userId, createdAt])
+  @@index([photoId])
+}
+
+model CaptureIntegration {
+  id                    String            @id @default(cuid())
+  eventId               String            @unique
+  event                 Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sourceBaseUrl         String
+  sourceEventId         String
+  sourceClientHash      String
+  sourceStoragePrefix   String?
+  status                CaptureSyncStatus @default(IDLE)
+  lastSyncAt            DateTime?
+  lastAttemptAt         DateTime?
+  lastError             String?
+  leaseToken            String?
+  leaseExpiresAt        DateTime?
+  remoteGuestSessions   Int?
+  remoteMetricsAt       DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@unique([sourceBaseUrl, sourceEventId])
+}
